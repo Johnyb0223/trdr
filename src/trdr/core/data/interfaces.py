@@ -1,8 +1,9 @@
 from abc import ABC, abstractmethod
 from typing import List
 from datetime import datetime
-from .bar import Bar
-from .timeframe import Timeframe
+from stonks_shared.enums.timeframe import Timeframe
+from trdr.core.data.bar import Bar
+
 
 class DataProvider(ABC):
     @abstractmethod

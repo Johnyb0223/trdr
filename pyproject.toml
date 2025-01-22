@@ -1,0 +1,17 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "trdr"
+version = "0.0.1"
+authors = [
+    { name = "developer_jeb" },
+]
+description = "Trading strategy parser and executor"
+dependencies = [
+    "stonks-shared>=0.0.2",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]

@@ -1,0 +1,2 @@
+stonks-shared==0.0.2
+pytest==8.3.4

@@ -6,13 +6,11 @@ strategy
       any_of
         MA20 > MA50
         MA20 > MA100
-      any_of
-        RSI < 30
-        VOLUME > 1000000
+        VOLUME > 100000
       PORTFOLIO_EXPOSURE < 0.25
       OPEN_POSITIONS < 5
       AVAILABLE_CASH > 1000
-      STOCK_VALUE > 100
+      PRICE > 100
   
   exit
     PRICE > (ENTRY * 1.06)
