@@ -20,13 +20,17 @@ class TradingDateTime:
 
     @classmethod
     def from_utc(cls, timestamp: datetime) -> 'TradingDateTime':
-        """Create from a UTC timestamp"""
+        '''
+        raises TradingDateError if the timestamp is not UTC or not a weekday
+        '''
         if timestamp.tzinfo != timezone.utc:
             raise TradingDateError("Timestamp must be UTC")
-        #should be a weekday
         if timestamp.date().weekday() not in [0, 1, 2, 3, 4]:
             raise TradingDateError("Timestamp must be a weekday")
-        return cls(timestamp.date(), timestamp)
+        return cls(timestamp.date(), timestamp.time())
 
-    def is_same_session(self, other: 'TradingDateTime') -> bool:
-        return self.trading_date == other.trading_date
+    def __str__(self) -> str:
+        return f"[{self.trading_date} {self.timestamp.strftime('%H:%M:%S')} UTC]"
+
+    def __repr__(self) -> str:
+        return self.__str__()

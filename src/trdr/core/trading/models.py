@@ -2,7 +2,7 @@ from enum import Enum
 from dataclasses import dataclass
 from decimal import Decimal
 from trdr.core.time.trading_datetime import TradingDateTime
-
+from trdr.core.money.money import Money
 class OrderSide(Enum):
     BUY = "BUY"
     SELL = "SELL"
@@ -14,7 +14,7 @@ class OrderResult:
     ticker: str
     side: OrderSide
     quantity: Decimal
-    fill_price: Decimal
+    fill_price: Money
     fill_time: TradingDateTime
     status: str  # "FILLED", "PARTIAL", "REJECTED", etc.
 
@@ -23,7 +23,7 @@ class Position:
     """Value object representing a single position"""
     ticker: str
     quantity: Decimal
-    entry_price: Decimal
+    entry_price: Money
     entry_date: TradingDateTime
 
     @property

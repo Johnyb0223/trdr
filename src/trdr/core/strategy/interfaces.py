@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Protocol, List
 from stonks_shared.enums.timeframe import Timeframe
-from trdr.core.data.bar import Bar
+from trdr.core.data.models import Bar
 
 class ILogicalExpression(Protocol):
     """Interface for all logical expressions (conditions and groups)"""
