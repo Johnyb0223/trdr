@@ -6,11 +6,24 @@ build-backend = "hatchling.build"
 name = "trdr"
 version = "0.0.1"
 authors = [
-    { name = "developer_jeb" },
+    { name = "developer_jeb", email = "developer_jeb@outlook.com" },
 ]
 description = "Trading strategy parser and executor"
 dependencies = [
-    "stonks-shared>=0.0.2",
+    "stonks-shared==0.0.2",
+    "yfinance==0.2.51",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest==8.3.4",
+    "pytest-asyncio==0.25.2",
+]
+
+open-telemetry = [
+    "opentelemetry-api==1.29.0",
+    "opentelemetry-sdk==1.29.0",
+    "opentelemetry-instrumentation==0.50b0",
 ]
 
 [tool.pytest.ini_options]
