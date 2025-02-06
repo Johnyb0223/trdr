@@ -1,8 +1,7 @@
 from decimal import Decimal
 from dataclasses import dataclass
-from typing import Union, Optional
-from datetime import date, datetime, time, timezone
-from pydantic import BaseModel
+from typing import Union
+from datetime import date, datetime, time, timezone, timedelta
 
 from trdr.core.shared.exceptions import TradingDateException
 
@@ -22,11 +21,11 @@ class Money:
     amount: Decimal
     currency: str = "USD"  # Default to USD since most trading is in dollars
 
-    def __init__(self, amount: Union[str, Decimal, float], currency: str = "USD"):
+    def __init__(self, amount: Union[str, Decimal, Decimal], currency: str = "USD"):
         """Initialize a Money object.
 
         Args:
-            amount: The monetary amount as string, Decimal or float
+            amount: The monetary amount as string, Decimal or Decimal
             currency: The currency code, defaults to USD
         """
         # Use object.__setattr__ since we're frozen
@@ -121,3 +120,30 @@ class TradingDateTime:
 
     def __repr__(self) -> str:
         return self.__str__()
+
+    def __add__(self, delta: timedelta) -> "TradingDateTime":
+        """
+        Add a timedelta to this TradingDateTime.
+
+        Args:
+            delta (timedelta): The time difference to add
+
+        Returns:
+            TradingDateTime: New instance with updated timestamp and trading_date
+
+        Raises:
+            TradingDateException: If the resulting trading date is not a weekday
+        """
+        if not isinstance(delta, timedelta):
+            raise NotImplementedError("Cannot add non-timedelta to TradingDateTime")
+
+        new_timestamp = self.timestamp + delta
+
+        # Ensure the new date is a valid trading day (weekday)
+        if new_timestamp.date().weekday() not in (0, 1, 2, 3, 4):
+            raise TradingDateException("Resulting trading date is not a weekday")
+
+        return TradingDateTime(new_timestamp.date(), new_timestamp)
+
+    def __radd__(self, delta: timedelta) -> "TradingDateTime":
+        return self.__add__(delta)

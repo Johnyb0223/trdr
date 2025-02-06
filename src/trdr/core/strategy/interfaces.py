@@ -26,6 +26,6 @@ class IIndicator(ABC):
         self.timeframe = timeframe
 
     @abstractmethod
-    def value(self) -> float:
+    def value(self) -> Decimal:
         """Calculate and return the indicator's current value"""
         pass

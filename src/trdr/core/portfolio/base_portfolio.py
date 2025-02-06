@@ -12,14 +12,22 @@ T = TypeVar("T", bound="BasePortfolio")
 class BasePortfolio:
 
     def __init__(self, broker: BaseBroker, tracer: Optional[trace.Tracer] = trace.NoOpTracer):
-        self._telemetry = tracer
+        self._tracer = tracer
         self._broker = broker
 
     @classmethod
     async def create(cls: Type[T], broker: BaseBroker, tracer: Optional[trace.Tracer] = trace.NoOpTracer) -> T:
         self = cls.__new__(cls)
         BasePortfolio.__init__(self, broker, tracer)
-        await self._initialize()
+        with self._tracer.start_as_current_span("BasePortfolio.create") as span:
+            try:
+                await self._initialize()
+            except Exception as e:
+                span.record_exception(e)
+                span.set_status(trace.StatusCode.ERROR)
+                raise
+            else:
+                span.set_status(trace.StatusCode.OK)
         return self
 
     @abstractmethod

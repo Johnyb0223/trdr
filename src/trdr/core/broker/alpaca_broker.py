@@ -32,7 +32,7 @@ class AlpacaBroker(AsyncBaseBroker):
         _alpaca_base_url (str): Base URL for API endpoints
         _pdt_strategy (IPDTStrategy): Strategy for Pattern Day Trading rule compliance
         _session (aiohttp.ClientSession): HTTP session for API requests
-        _telemetry (TelemetryManager): Telemetry manager for instrumentation
+        _tracer (TelemetryManager): tracer manager for instrumentation
     """
 
     def __init__(
@@ -50,7 +50,7 @@ class AlpacaBroker(AsyncBaseBroker):
         alpaca_secret_key: Optional[str] = None,
         base_url: Optional[str] = None,
         pdt_strategy: IPDTStrategy = NunStrategy(),
-        telemetry: trace.Tracer = NoOpTracer(),
+        tracer: trace.Tracer = NoOpTracer(),
     ):
         """Create and initialize an AlpacaBroker instance.
 
@@ -59,7 +59,7 @@ class AlpacaBroker(AsyncBaseBroker):
             alpaca_secret_key: Secret key for authentication. Falls back to ALPACA_SECRET_KEY env var.
             base_url: Base URL for API endpoints. Falls back to ALPACA_BASE_URL env var.
             pdt_strategy: Strategy for Pattern Day Trading rule compliance.
-            telemetry: Telemetry manager for instrumentation.
+            tracer: tracer manager for instrumentation.
 
         Returns:
             AlpacaBroker: Initialized broker instance.
@@ -71,12 +71,12 @@ class AlpacaBroker(AsyncBaseBroker):
                 alpaca_secret_key="your_secret",
                 base_url="https://paper-api.alpaca.markets",
                 pdt_strategy=NunStrategy(),
-                telemetry=TelemetryManager(),
+                tracer=tracerManager(),
             )
             ```
         """
         self = cls.__new__(cls)
-        AsyncBaseBroker.__init__(self, telemetry=telemetry)
+        AsyncBaseBroker.__init__(self, tracer=tracer)
         self._alpaca_api_key = alpaca_api_key or os.getenv("ALPACA_API_KEY")
         self._alpaca_secret_key = alpaca_secret_key or os.getenv("ALPACA_SECRET_KEY")
         self._alpaca_base_url = base_url or os.getenv("ALPACA_BASE_URL")

@@ -24,18 +24,30 @@ class YFBarProvider(BaseBarProvider):
         """
         this function is called by the T.create() method implemented in the base class. Use that method to create a new securities provider.
         """
-        if not self._symbols:
-            raise BarProviderException("Symbols must be provided")
-        if len(self._symbols) > 600:
-            raise BarProviderException("Yahoo Finance Provider does not support more than 600 symbols")
-        await self._refresh_data()
+        with self._tracer.start_as_current_span("YFBarProvider._initialize") as span:
+            if not self._symbols:
+                span.add_event("symbols_not_provided")
+                span.set_status(trace.Status(trace.StatusCode.ERROR))
+                raise BarProviderException("Symbols must be provided")
+            if len(self._symbols) > 600:
+                span.add_event("symbols_too_many")
+                span.set_status(trace.Status(trace.StatusCode.ERROR))
+                raise BarProviderException("Yahoo Finance Provider does not support more than 600 symbols")
+            try:
+                await self._refresh_data()
+            except Exception as e:
+                span.add_event("refresh_data_error")
+                span.set_status(trace.Status(trace.StatusCode.ERROR))
+                raise
+            else:
+                span.set_status(trace.Status(trace.StatusCode.OK))
 
     async def _refresh_data(self) -> None:
         """
         This function is called by the factory method in the base class upon instantiation
         of a new provider.
         """
-        with self._telemetry.start_as_current_span("YFSecuritiesProvider._refresh_data") as span:
+        with self._tracer.start_as_current_span("YFBarProvider._refresh_data") as span:
             span.set_attribute("symbols_count", len(self._symbols))
             try:
                 data = await self._fetch_batch_stock_data()
@@ -63,7 +75,7 @@ class YFBarProvider(BaseBarProvider):
         self,
     ) -> pd.DataFrame:
 
-        with self._telemetry.start_as_current_span("YFSecuritiesProvider._fetch_batch_stock_data") as span:
+        with self._tracer.start_as_current_span("YFBarProvider._fetch_batch_stock_data") as span:
 
             end_datetime = TradingDateTime.now().timestamp
             start_datetime = end_datetime - timedelta(days=300)
@@ -94,7 +106,7 @@ class YFBarProvider(BaseBarProvider):
             return data
 
     def _convert_df_to_bars(self, df: pd.DataFrame) -> List[Bar]:
-        with self._telemetry.start_as_current_span("YFProvider._convert_df_to_bars") as span:
+        with self._tracer.start_as_current_span("YFBarProvider._convert_df_to_bars") as span:
 
             bars = []
             total_rows = len(df)
@@ -127,7 +139,7 @@ class YFBarProvider(BaseBarProvider):
             return bars
 
     async def get_current_bar(self, symbol: str) -> Money:
-        with self._telemetry.start_as_current_span("YFProvider.get_current_price") as span:
+        with self._tracer.start_as_current_span("YFBarProvider.get_current_bar") as span:
             span.set_attribute("symbol", symbol)
             try:
                 # Fetch the latest data from Yahoo Finance
@@ -156,7 +168,7 @@ class YFBarProvider(BaseBarProvider):
         symbol: str,
         lookback: int,
     ) -> List[Bar]:
-        with self._telemetry.start_as_current_span("YFProvider.get_bars") as span:
+        with self._tracer.start_as_current_span("YFBarProvider.get_bars") as span:
             span.set_attribute("symbol", symbol)
             span.set_attribute("lookback", lookback)
             if len(self._data_cache[symbol]) < lookback:
@@ -197,7 +209,6 @@ if __name__ == "__main__":
         tracer = trace.get_tracer("trdr")
         try:
             provider = await YFBarProvider.create(["AAPL", "MSFT", "GOOGL"], tracer)
-            current_bar = await provider.get_current_bar("AAPL")
             for symbol in provider._symbols:
                 current_bar = await provider.get_current_bar(symbol)
                 print(current_bar)

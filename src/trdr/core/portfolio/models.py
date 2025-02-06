@@ -2,7 +2,7 @@ from enum import Enum
 from typing import Optional, List
 from pydantic import BaseModel, model_validator, Field
 from opentelemetry import trace
-
+from decimal import Decimal
 from ..shared.models import Money, TradingDateTime
 from ..bar_provider.models import Bar
 
@@ -27,7 +27,47 @@ class OrderStatus(Enum):
         return f"OrderStatus(value={self.value})"
 
 
-class Side(Enum):
+class OrderSide(Enum):
+    """Represents the side/direction of a trade or position.
+
+    Values:
+        BUY: Buy/long position
+        SELL: Sell/short position
+    """
+
+    BUY = "BUY"
+    SELL = "SELL"
+
+    def to_json(self) -> str:
+        return self.value
+
+
+class Order(BaseModel):
+    """Represents a trade order.
+
+    Attributes:
+        quantity: Number of shares/contracts to trade
+        side: Whether to buy/long or sell/short
+        status: Current status of the order
+        timestamp: When the order was placed
+    """
+
+    quantity: Decimal
+    side: OrderSide
+    status: OrderStatus
+    timestamp: TradingDateTime
+
+    def to_json(self) -> str:
+        return self.model_dump_json(indent=2)
+
+    def __str__(self) -> str:
+        return f"Order(quantity={self.quantity}, side={self.side}, status={self.status}, timestamp={self.timestamp})"
+
+    class Config:
+        arbitrary_types_allowed = True
+
+
+class PositionSide(Enum):
     """Represents the side/direction of a trade or position.
 
     Values:
@@ -45,6 +85,21 @@ class Side(Enum):
         return f"Side(value={self.value})"
 
 
+class PositionStatus(Enum):
+    """Represents the status of a position in the trading system.
+
+    Values:
+        OPEN: Position is open
+        CLOSED: Position is closed
+    """
+
+    OPEN = "OPEN"
+    CLOSED = "CLOSED"
+
+    def to_json(self) -> str:
+        return self.value
+
+
 class Position(BaseModel):
     """Represents an open position in a security.
 
@@ -54,40 +109,25 @@ class Position(BaseModel):
         side: Whether position is long or short
     """
 
-    quantity: float
+    symbol: str
+    quantity: Decimal
     average_price: Money
-    side: Optional[Side]
+    side: Optional[PositionSide]
+
+    @classmethod
+    def create_dummy_position(cls, symbol: str = "AAPL") -> "Position":
+        return cls(
+            symbol=symbol,
+            quantity=10,
+            average_price=Money(100, "USD"),
+            side=PositionSide.LONG,
+        )
 
     def to_json(self) -> str:
         return self.model_dump_json(indent=2)
 
     def __str__(self) -> str:
         return f"Position(quantity={self.quantity}, average_price={self.average_price}, side={self.side})"
-
-    class Config:
-        arbitrary_types_allowed = True
-
-
-class Order(BaseModel):
-    """Represents a trade order.
-
-    Attributes:
-        quantity: Number of shares/contracts to trade
-        side: Whether to buy/long or sell/short
-        status: Current status of the order
-        timestamp: When the order was placed
-    """
-
-    quantity: float
-    side: Side
-    status: OrderStatus
-    timestamp: TradingDateTime
-
-    def to_json(self) -> str:
-        return self.model_dump_json(indent=2)
-
-    def __str__(self) -> str:
-        return f"Order(quantity={self.quantity}, side={self.side}, status={self.status}, timestamp={self.timestamp})"
 
     class Config:
         arbitrary_types_allowed = True
@@ -100,7 +140,7 @@ class Security(BaseModel):
         symbol (str): The ticker symbol for the security
         current_bar (Bar): The most recent price/volume bar
         bars (List[Bar]): Historical price/volume bars (minimum 200 required)
-        tracer (Optional[trace.Tracer]): OpenTelemetry tracer for monitoring
+        tracer (Optional[trace.Tracer]): Opentracer tracer for monitoring
 
     Methods:
         validate_fields: Validates the security attributes
@@ -113,56 +153,6 @@ class Security(BaseModel):
     current_bar: Bar
     bars: List[Bar]
     tracer: Optional[trace.Tracer] = Field(default=trace.NoOpTracer(), exclude=True)
-
-    @model_validator(mode="after")
-    def validate_fields(cls, values):
-        """Validates the security fields.
-
-        Checks:
-        - Symbol is a string
-        - Bars is a list with at least 200 entries
-        - Current bar is a valid Bar object
-
-        Args:
-            values: The model instance being validated
-
-        Returns:
-            The validated model instance
-
-        Raises:
-            ValueError: If any validation checks fail
-        """
-        tracer = values.tracer
-        bars = values.bars
-        current_bar = values.current_bar
-        symbol = values.symbol
-
-        with tracer.start_as_current_span("Security.validate_fields") as span:
-            # Validate symbol
-            if not isinstance(symbol, str):
-                span.set_status(trace.StatusCode.ERROR)
-                span.record_exception(ValueError("Symbol must be a string"))
-                raise ValueError("Symbol must be a string")
-            span.set_attribute("symbol", symbol)
-            span.add_event("symbol_validated")
-            # Validate bars
-            if not isinstance(bars, list):
-                span.set_status(trace.StatusCode.ERROR)
-                span.record_exception(ValueError("Bars must be a list"))
-                raise ValueError("Bars must be a list")
-            span.add_event("bars_validated")
-
-            # Validate current_bar
-            if not isinstance(current_bar, Bar):
-                span.set_status(trace.StatusCode.ERROR)
-                span.record_exception(ValueError("Current bar must be a Bar object"))
-                raise ValueError("Current bar must be a Bar object")
-            span.add_event("current_bar_validated")
-
-            span.set_status(trace.StatusCode.OK)
-            span.add_event("security_validated")
-
-        return values
 
     def get_current_price(self) -> Money:
         """Returns the current price of the security.
@@ -282,6 +272,65 @@ class Security(BaseModel):
         sum_of_volumes = sum(bar.volume for bar in self.bars[-200:])
         return sum_of_volumes // 200
 
+    @model_validator(mode="after")
+    def validate_fields(cls, values):
+        """Validates the security fields.
+
+        Checks:
+        - Symbol is a string
+        - Bars is a list with at least 200 entries
+        - Current bar is a valid Bar object
+
+        Args:
+            values: The model instance being validated
+
+        Returns:
+            The validated model instance
+
+        Raises:
+            ValueError: If any validation checks fail
+        """
+        tracer = values.tracer
+        bars = values.bars
+        current_bar = values.current_bar
+        symbol = values.symbol
+
+        with tracer.start_as_current_span("Security.validate_fields") as span:
+            # Validate symbol
+            if not isinstance(symbol, str):
+                span.set_status(trace.StatusCode.ERROR)
+                span.record_exception(ValueError("Symbol must be a string"))
+                raise ValueError("Symbol must be a string")
+            span.set_attribute("symbol", symbol)
+            span.add_event("symbol_validated")
+            # Validate bars
+            if not isinstance(bars, list):
+                span.set_status(trace.StatusCode.ERROR)
+                span.record_exception(ValueError("Bars must be a list"))
+                raise ValueError("Bars must be a list")
+            span.add_event("bars_validated")
+
+            # Validate current_bar
+            if not isinstance(current_bar, Bar):
+                span.set_status(trace.StatusCode.ERROR)
+                span.record_exception(ValueError("Current bar must be a Bar object"))
+                raise ValueError("Current bar must be a Bar object")
+            span.add_event("current_bar_validated")
+
+            span.set_status(trace.StatusCode.OK)
+            span.add_event("security_validated")
+
+        return values
+
+    @classmethod
+    def create_dummy_security(cls, symbol: str = "AAPL") -> "Security":
+        bars = Bar.create_dummy_bars(count=200)
+        return cls(
+            symbol=symbol,
+            current_bar=bars[-2],
+            bars=bars,
+        )
+
     def to_json(self) -> str:
         return self.model_dump_json(exclude={"tracer"}, indent=2)
 
@@ -321,8 +370,8 @@ class TradeContext(BaseModel):
         cash (Money): Cash available in the account.
         equity (Money): Account equity, representing cash plus the market value of positions.
         rolling_day_trade_count (int): Number of day trades executed over a rolling five-day period.
-        account_exposure (float): Total account exposure, representing the overall allocation risk.
-        position_exposure (Optional[float]): Exposure of the position as a fraction of account equity.
+        account_exposure (Decimal): Total account exposure, representing the overall allocation risk.
+        position_exposure (Optional[Decimal]): Exposure of the position as a fraction of account equity.
             Must be set if a position exists; otherwise, it should remain unset.
     """
 
@@ -336,9 +385,9 @@ class TradeContext(BaseModel):
     equity: Money
 
     # account exposure
-    account_exposure: float
+    account_exposure: Decimal
     # position exposure as a ratio of account equity
-    position_exposure: Optional[float]
+    position_exposure: Optional[Decimal]
 
     # tracer
     tracer: Optional[trace.Tracer] = Field(default=trace.NoOpTracer(), exclude=True)

@@ -1,6 +1,10 @@
 from pydantic import BaseModel, model_validator
 from .exceptions import BarValidationException
 from ..shared.models import TradingDateTime, Money
+import random
+from datetime import timedelta
+from typing import List
+from decimal import Decimal
 
 
 class Bar(BaseModel):
@@ -26,6 +30,43 @@ class Bar(BaseModel):
         if self.volume < 0:
             raise BarValidationException("Volume cannot be negative")
         return self
+
+    @classmethod
+    def create_dummy_bars(cls, count: int, start_price: Money = Money(100)) -> List["Bar"]:
+        bars = []
+        current_price = start_price
+        current_datetime = TradingDateTime.now()
+
+        for _ in range(count):
+            open_p = current_price.amount
+            # A small random movement to simulate market changes
+            price_change = Decimal(random.gauss(0, 1))  # mean=0, std=1
+            close_p = open_p + price_change
+
+            # Generate high and low values that surround open and close.
+            high_p = max(open_p, close_p) + Decimal(random.gauss(0, 0.5))
+            low_p = min(open_p, close_p) - Decimal(random.gauss(0, 0.5))
+
+            # Simulate volume with random variation.
+            volume = random.randint(800, 1200)
+
+            bar = cls(
+                trading_datetime=current_datetime,
+                open=Money(open_p),
+                high=Money(high_p),
+                low=Money(low_p),
+                close=Money(close_p),
+                volume=volume,
+            )
+
+            bars.append(bar)
+
+            # Prepare for the next iteration: use the current close as the next open.
+            current_price = Money(close_p)
+            # Increment the timestamp (here we add 1 minute between bars).
+            current_datetime = current_datetime + timedelta(minutes=1)
+
+        return bars
 
     def to_json(self) -> str:
         return self.model_dump_json(indent=2)

@@ -1,10 +1,8 @@
 from typing import Union
-from trdr.telemetry import TelemetryManager, NullTelemetryManager
 from trdr.core.broker.pdt.base_pdt_strategy import BasePDTStrategy
-from trdr.core.broker.pdt.interfaces import IPDTStrategy
 
 
-class WiggleStrategy(IPDTStrategy, BasePDTStrategy):
+class WiggleStrategy(BasePDTStrategy):
     """Aggressive strategy - open positions with wiggle room
 
     This strategy allows opening more positions than available day trades:
@@ -14,10 +12,12 @@ class WiggleStrategy(IPDTStrategy, BasePDTStrategy):
     """
 
     def __init__(
-        self, wiggle_room: int = 2, telemetry: Union[TelemetryManager | NullTelemetryManager] = NullTelemetryManager()
+        self,
+        *args,
+        **kwargs,
     ):
-        super().__init__(telemetry)
-        self.wiggle_room = wiggle_room
+        """Disabled constructor - use WiggleStrategy.create() instead."""
+        raise TypeError("Use WiggleStrategy.create() instead to create a new WiggleStrategy")
 
     def check_pdt_open_safely(self, number_of_positions_opened_today: int, rolling_day_trade_count: int) -> bool:
         max_positions = (3 - rolling_day_trade_count) + self.wiggle_room

@@ -20,17 +20,20 @@ if __name__ == "__main__":
             list_of_tickers = ["AAPL"]
             provider = await YFBarProvider.create(list_of_tickers, tracer)
 
-            async with await MockBroker.create(tracer) as broker:
+            async with await MockBroker.create(tracer=tracer) as broker:
                 portfolio = await Portfolio.create(broker=broker, tracer=tracer)
 
                 for ticker in list_of_tickers:
                     current_bar = await provider.get_current_bar(ticker)
-                bars = await provider.get_bars(ticker, 1)
-                security = Security.model_validate(
-                    {"symbol": ticker, "current_bar": current_bar, "bars": bars, "tracer": tracer}
-                )
-                trade_context = await portfolio.get_trade_context(security)
-                print(trade_context.to_json())
+                    bars = await provider.get_bars(ticker, 1)
+                    security = Security.model_validate(
+                        {"symbol": ticker, "current_bar": current_bar, "bars": bars, "tracer": tracer}
+                    )
+                    trade_context = await portfolio.get_trade_context(security)
+                    print(trade_context.to_json())
+
+                positions = await broker.get_positions()
+                print(positions)
 
         except Exception as e:
             print(e)

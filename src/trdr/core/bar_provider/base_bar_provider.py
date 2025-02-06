@@ -15,13 +15,21 @@ class BaseBarProvider(ABC):
     ):
         self._symbols = set(symbols)
         self._data_cache = {}
-        self._telemetry = tracer
+        self._tracer = tracer
 
     @classmethod
     async def create(cls: Type[T], symbols: List[str], tracer: Optional[trace.Tracer] = trace.NoOpTracer) -> T:
         self = cls.__new__(cls)
         BaseBarProvider.__init__(self, symbols, tracer)
-        await self._initialize()
+        with self._tracer.start_as_current_span("BaseBarProvider.create") as span:
+            try:
+                await self._initialize()
+            except Exception as e:
+                span.record_exception(e)
+                span.set_status(trace.StatusCode.ERROR)
+                raise
+            else:
+                span.set_status(trace.StatusCode.OK)
         return self
 
     @abstractmethod

@@ -1,10 +1,7 @@
-from typing import Union
-from trdr.telemetry import TelemetryManager, NullTelemetryManager
 from trdr.core.broker.pdt.base_pdt_strategy import BasePDTStrategy
-from trdr.core.broker.pdt.interfaces import IPDTStrategy
 
 
-class YoloStrategy(IPDTStrategy, BasePDTStrategy):
+class YoloStrategy(BasePDTStrategy):
     """YOLO strategy - open positions without PDT constraints
 
     This strategy ignores PDT rules for opening positions but prevents same-day closes
@@ -12,8 +9,13 @@ class YoloStrategy(IPDTStrategy, BasePDTStrategy):
     if they move against you.
     """
 
-    def __init__(self, telemetry: Union[TelemetryManager | NullTelemetryManager] = NullTelemetryManager()):
-        super().__init__(telemetry)
+    def __init__(
+        self,
+        *args,
+        **kwargs,
+    ):
+        """Disabled constructor - use YoloStrategy.create() instead."""
+        raise TypeError("Use YoloStrategy.create() instead to create a new YoloStrategy")
 
     def check_pdt_open_safely(self, number_of_positions_opened_today: int, rolling_day_trade_count: int) -> bool:
         return True

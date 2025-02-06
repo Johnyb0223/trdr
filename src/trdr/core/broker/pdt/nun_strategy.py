@@ -1,11 +1,10 @@
 from typing import Union
-from trdr.telemetry import TelemetryManager, NullTelemetryManager
-from trdr.core.broker.pdt.base_pdt_strategy import BasePDTStrategy
-from trdr.core.broker.pdt.interfaces import IPDTStrategy
-from trdr.core.shared.exceptions import PDTStrategyException
+
+from .base_pdt_strategy import BasePDTStrategy
+from .exceptions import PDTStrategyException
 
 
-class NunStrategy(IPDTStrategy, BasePDTStrategy):
+class NunStrategy(BasePDTStrategy):
     """Conservative strategy - only open positions we can safely close
 
     This strategy ensures we always have enough day trades available to close positions:
@@ -15,8 +14,13 @@ class NunStrategy(IPDTStrategy, BasePDTStrategy):
     - results in us only being able to open 3 positions on any given day
     """
 
-    def __init__(self, telemetry: Union[TelemetryManager | NullTelemetryManager] = NullTelemetryManager()):
-        super().__init__(telemetry)
+    def __init__(
+        self,
+        *args,
+        **kwargs,
+    ):
+        """Disabled constructor - use NunStrategy.create() instead."""
+        raise TypeError("Use NunStrategy.create() instead to create a new NunStrategy")
 
     def check_pdt_open_safely(self, number_of_positions_opened_today: int, rolling_day_trade_count: int) -> bool:
         """

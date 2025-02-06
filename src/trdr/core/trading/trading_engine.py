@@ -3,7 +3,7 @@ from trdr.core.portfolio.base_portfolio import IPortfolio
 from trdr.core.strategy.strategy import Strategy
 from trdr.core.bar_provider.interfaces import IDataProvider
 from trdr.telemetry import TelemetryConfig
-from trdr.telemetry.instrumentation import create_telemetry
+from trdr.telemetry.instrumentation import create_tracer
 from trdr.core.shared.exceptions import DataProviderException, PortfolioException
 
 
@@ -20,7 +20,7 @@ class TradingEngine:
         self.data_provider = data_provider
         self.portfolio = portfolio
         self.watchlist = watchlist
-        self._telemetry = create_telemetry(telemetry_config)
+        self._tracer = create_tracer(telemetry_config)
 
     @classmethod
     async def create(
