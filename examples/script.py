@@ -18,7 +18,7 @@ if __name__ == "__main__":
         trace.set_tracer_provider(tracer_provider)
         tracer = trace.get_tracer("trdr")
         try:
-            provider = await YFBarProvider.create(["AAPL"], tracer)
+            provider = await YFBarProvider.create(["AAPL", "MSFT"], tracer)
             async with await MockBroker.create(tracer=tracer) as broker:
                 strategy = await Strategy.create("first-strat", broker, provider, tracer)
                 print(strategy.strategy_ast)

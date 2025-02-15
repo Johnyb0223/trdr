@@ -77,6 +77,13 @@ class BaseBroker(ABC):
         """
         pass
 
+    @abstractmethod
+    async def _position_opened_today(self, symbol: str) -> bool:
+        """
+        Implement the low-level position opened today logic specific to the subclass (e.g., interaction with the API).
+        """
+        pass
+
     async def get_available_cash(self) -> Money:
         with self._tracer.start_as_current_span("BaseBroker.get_cash") as span:
             await self._stale_handler()

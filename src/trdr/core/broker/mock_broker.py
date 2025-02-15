@@ -51,3 +51,8 @@ class MockBroker(BaseBroker):
                 raise
             else:
                 span.set_status(trace.StatusCode.OK)
+
+    async def _position_opened_today(self, symbol: str) -> bool:
+        with self._tracer.start_as_current_span("mock_broker._position_opened_today") as span:
+            span.set_status(trace.StatusCode.OK)
+            return False

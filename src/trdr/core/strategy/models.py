@@ -5,6 +5,14 @@ from ..broker.models import Position
 from ..shared.models import Money
 
 
+class MissingContextValue(Exception):
+    def __init__(self, message: str):
+        self.message = message
+
+    def __str__(self) -> str:
+        return self.message
+
+
 class ContextIdentifier(str, Enum):
     MA5 = "ma5"
     MA20 = "ma20"
@@ -37,7 +45,7 @@ class StrategyContext(BaseModel):
     av5: Optional[Money] = Field(None, description="5-day average volume")
     av20: Optional[Money] = Field(None, description="20-day average volume")
     av50: Optional[Money] = Field(None, description="50-day average volume")
-    AV100: Optional[Money] = Field(None, description="100-day average volume")
+    av100: Optional[Money] = Field(None, description="100-day average volume")
     av200: Optional[Money] = Field(None, description="200-day average volume")
     current_volume: Optional[int] = Field(None, description="Current trading volume")
     account_exposure: Optional[float] = Field(None, description="Account exposure percentage")

@@ -1,7 +1,7 @@
 from typing import List, Any
 from decimal import Decimal
 
-from ..core.strategy.models import StrategyContext, ContextIdentifier
+from ..core.strategy.models import StrategyContext, ContextIdentifier, MissingContextValue
 from ..core.shared.models import Money
 
 
@@ -61,6 +61,8 @@ class Identifier(Expression):
         # Retrieve the identifier's value from the context
         identifier = ContextIdentifier[self.name]
         value = getattr(context, identifier.value)
+        if not value:
+            raise MissingContextValue(f"Missing context value for {self.name}")
         if isinstance(value, Money):
             return value.amount
         else:
@@ -93,6 +95,10 @@ class BinaryExpression(Expression):
             return left_val * right_val
         elif self.operator == "/":
             return left_val / right_val
+        elif self.operator == "CROSSED_ABOVE":
+            return left_val > right_val
+        elif self.operator == "CROSSED_BELOW":
+            return left_val < right_val
         else:
             raise ValueError(f"Unsupported operator {self.operator}")
 

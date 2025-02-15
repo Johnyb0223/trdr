@@ -4,7 +4,9 @@ from typing import List
 
 from ..core.strategy.models import ContextIdentifier
 
-# These are keywords that are not part of the ContextIdentifier enum.
+# These are keywords that are not part of the ContextIdentifier enum as they are
+# not really business logic identifiers. They are keywords that do not translate
+# directly to values within the StrategyContext object.
 LexerContextIdentifiers = list(ContextIdentifier.__members__.keys())
 LexerContextIdentifiers.extend(
     [
