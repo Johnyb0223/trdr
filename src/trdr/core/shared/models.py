@@ -2,7 +2,7 @@ from decimal import Decimal
 from dataclasses import dataclass
 from typing import Union
 from datetime import date, datetime, time, timezone, timedelta
-
+from enum import Enum
 from trdr.core.shared.exceptions import TradingDateException
 
 
@@ -147,3 +147,42 @@ class TradingDateTime:
 
     def __radd__(self, delta: timedelta) -> "TradingDateTime":
         return self.__add__(delta)
+
+
+class Timeframe(Enum):
+    d1 = 86400
+    d5 = 432000
+    d20 = 1728000
+    d50 = 4320000
+    d100 = 8640000
+    d200 = 17280000
+
+    def to_days(self) -> int:
+        return self.value // 86400
+
+    def to_yf_interval(self) -> str:
+        return {
+            "d1": "1d",
+            "d5": "5d",
+            "d20": "20d",
+            "d50": "50d",
+            "d100": "100d",
+            "d200": "200d",
+        }[self.name]
+
+    def __index__(self) -> int:
+        return self.to_days()
+
+    def __str__(self) -> str:
+        name_map = {
+            "d1": "1 day",
+            "d5": "5 days",
+            "d20": "20 days",
+            "d50": "50 days",
+            "d100": "100 days",
+            "d200": "200 days",
+        }
+        str_representation = name_map.get(self.name, None)
+        if not str_representation:
+            raise ValueError(f"Could not convert {self.name} to string")
+        return str_representation

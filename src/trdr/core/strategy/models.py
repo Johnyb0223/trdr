@@ -1,65 +1,50 @@
-from typing import List, Optional
-from trdr.core.strategy.interfaces import ILogicalExpression, IIndicator
-from typing import Callable
-import operator
+from enum import Enum
+from typing import Optional
+from pydantic import BaseModel, Field, ConfigDict
+from ..broker.models import Position
+from ..shared.models import Money
 
 
-class LogicalGroup(ILogicalExpression):
-    """Represents a group of conditions combined with AND/OR"""
-
-    def __init__(self, type: str):
-        if type not in ["all_of", "any_of"]:
-            raise ValueError("Type must be 'all_of' or 'any_of'")
-        self.type = type
-        self.expressions: List[ILogicalExpression] = []
-
-    def all_of(self, expression: ILogicalExpression) -> "LogicalGroup":
-        """Start a new all_of group nested under this group"""
-        new_group = LogicalGroup("all_of")
-        self.expressions.append(new_group)
-        return new_group
-
-    def any_of(self, expression: ILogicalExpression) -> "LogicalGroup":
-        """Start a new any_of group nested under this group"""
-        new_group = LogicalGroup("any_of")
-        self.expressions.append(new_group)
-        return new_group
-
-    def condition(self, expression: ILogicalExpression) -> "LogicalGroup":
-        """Add a condition to this group"""
-        self.expressions.append(expression)
-        return self
-
-    def end(self) -> Optional["LogicalGroup"]:
-        """End this group and return to parent"""
-        return self.parent
-
-    def evaluate(self) -> bool:
-        if self.type == "all_of":
-            return all(expr.evaluate() for expr in self.expressions)
-        return any(expr.evaluate() for expr in self.expressions)
+class ContextIdentifier(str, Enum):
+    MA5 = "ma5"
+    MA20 = "ma20"
+    MA50 = "ma50"
+    MA100 = "ma100"
+    MA200 = "ma200"
+    AV5 = "av5"
+    AV20 = "av20"
+    AV50 = "av50"
+    AV100 = "av100"
+    AV200 = "av200"
+    CURRENT_VOLUME = "current_volume"
+    RSI = "rsi"
+    ACCOUNT_EXPOSURE = "account_exposure"
+    OPEN_POSITIONS = "open_positions"
+    AVAILABLE_CASH = "available_cash"
+    STOCK_VALUE = "stock_value"
+    CURRENT_PRICE = "current_price"
+    AVG_COST = "avg_cost"
+    CURRENT_POSITION = "current_position"
+    AVERAGE_COST = "average_cost"
 
 
-class LogicalCondition(ILogicalExpression):
-    VALID_OPERATORS = {operator.lt, operator.le, operator.gt, operator.ge, operator.eq, operator.ne}
+class StrategyContext(BaseModel):
+    ma5: Optional[Money] = Field(None, description="5-day moving average")
+    ma20: Optional[Money] = Field(None, description="20-day moving average")
+    ma50: Optional[Money] = Field(None, description="50-day moving average")
+    ma100: Optional[Money] = Field(None, description="100-day moving average")
+    ma200: Optional[Money] = Field(None, description="200-day moving average")
+    av5: Optional[Money] = Field(None, description="5-day average volume")
+    av20: Optional[Money] = Field(None, description="20-day average volume")
+    av50: Optional[Money] = Field(None, description="50-day average volume")
+    AV100: Optional[Money] = Field(None, description="100-day average volume")
+    av200: Optional[Money] = Field(None, description="200-day average volume")
+    current_volume: Optional[int] = Field(None, description="Current trading volume")
+    account_exposure: Optional[float] = Field(None, description="Account exposure percentage")
+    open_positions: Optional[int] = Field(None, description="Number of open positions")
+    available_cash: Optional[Money] = Field(None, description="Available cash")
+    stock_value: Optional[Money] = Field(None, description="Stock value")
+    current_price: Optional[Money] = Field(None, description="Current price")
+    average_cost: Optional[Money] = Field(None, description="Average position price")
 
-    def __init__(self, left: IIndicator, operator: Callable, right: IIndicator | Decimal | int):
-        self._validate_inputs(left, operator, right)
-        self.left = left
-        self.operator = operator
-        self.right = right
-
-    def _validate_inputs(self, left, operator, right):
-        if not hasattr(left, "value"):
-            raise ValueError("Left side must be an indicator with a value() method")
-
-        if operator not in self.VALID_OPERATORS:
-            raise ValueError("Invalid operator. Must be a comparison operator")
-
-        if not (hasattr(right, "value") or isinstance(right, (int, Decimal))):
-            raise ValueError("Right side must be an indicator or a number")
-
-    def evaluate(self) -> bool:
-        left_value = self.left.value()
-        right_value = self.right.value() if hasattr(self.right, "value") else self.right
-        return self.operator(left_value, right_value)
+    model_config = ConfigDict(arbitrary_types_allowed=True)

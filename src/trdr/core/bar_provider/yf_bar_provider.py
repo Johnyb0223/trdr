@@ -2,13 +2,11 @@ from typing import List
 from datetime import timedelta, timezone
 import yfinance as yf
 import pandas as pd
-import asyncio
 from opentelemetry import trace
 
-from ..exceptions import BarProviderException
-from ..base_bar_provider import BaseBarProvider
-from ..models import Bar, TradingDateTime, Money
-from ...shared.enums import Timeframe
+from .exceptions import BarProviderException
+from .base_bar_provider import BaseBarProvider
+from .models import Bar, TradingDateTime, Money, Security
 
 
 class YFBarProvider(BaseBarProvider):
@@ -90,7 +88,7 @@ class YFBarProvider(BaseBarProvider):
                 start=start_datetime,
                 end=end_datetime,
                 group_by="ticker",
-                interval=Timeframe.d1.__str__(),
+                interval="1d",
             )
 
             if yf.shared._ERRORS:
@@ -138,12 +136,12 @@ class YFBarProvider(BaseBarProvider):
 
             return bars
 
-    async def get_current_bar(self, symbol: str) -> Money:
+    async def _get_current_bar(self, symbol: str) -> Money:
         with self._tracer.start_as_current_span("YFBarProvider.get_current_bar") as span:
             span.set_attribute("symbol", symbol)
             try:
                 # Fetch the latest data from Yahoo Finance
-                data = yf.download(symbol, period="1d", interval=Timeframe.m15.__str__(), group_by="ticker")
+                data = yf.download(symbol, period="1d", interval="15m", group_by="ticker")
                 if yf.shared._ERRORS:
                     error_msg = "; ".join(yf.shared._ERRORS.values())
                     span.add_event("download_error")
@@ -163,7 +161,7 @@ class YFBarProvider(BaseBarProvider):
                 span.record_exception(e)
                 raise
 
-    async def get_bars(
+    async def _get_bars(
         self,
         symbol: str,
         lookback: int,
@@ -192,30 +190,14 @@ class YFBarProvider(BaseBarProvider):
                 span.record_exception(e)
                 raise
 
-
-if __name__ == "__main__":
-    """
-    this is an example of how a securities provider can be created and used within a script. This also shouws how to set up a global tracer provider and how to use it to create a tracer for a specific component.
-    """
-
-    from opentelemetry.sdk.trace import TracerProvider
-    from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
-
-    async def main():
-        provider = TracerProvider()
-        span_processor = BatchSpanProcessor(ConsoleSpanExporter())
-        provider.add_span_processor(span_processor)
-        trace.set_tracer_provider(provider)
-        tracer = trace.get_tracer("trdr")
-        try:
-            provider = await YFBarProvider.create(["AAPL", "MSFT", "GOOGL"], tracer)
-            for symbol in provider._symbols:
-                current_bar = await provider.get_current_bar(symbol)
-                print(current_bar)
-                bars = await provider.get_bars(symbol, 20)
-                for bar in bars:
-                    print(bar)
-        except Exception as e:
-            print(e)
-
-    asyncio.run(main())
+    async def get_security_list(self) -> List[Security]:
+        with self._tracer.start_as_current_span("YFBarProvider.get_security_list") as span:
+            span.set_status(trace.Status(trace.StatusCode.OK))
+            return [
+                Security(
+                    symbol=symbol,
+                    bars=await self._get_bars(symbol, len(self._data_cache[symbol])),
+                    current_bar=await self._get_current_bar(symbol),
+                )
+                for symbol in self._symbols
+            ]

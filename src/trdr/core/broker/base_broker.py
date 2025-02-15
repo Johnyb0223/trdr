@@ -4,9 +4,10 @@ from typing import Optional, Type, TypeVar, Dict
 from opentelemetry import trace
 from opentelemetry.trace import NoOpTracer
 from decimal import Decimal
+from datetime import timedelta
 
-from ..portfolio.models import Position, Security
-from ..shared.models import Money
+from .models import Position, OrderSide
+from ..shared.models import Money, TradingDateTime
 from .pdt.nun_strategy import NunStrategy
 from .pdt.base_pdt_strategy import BasePDTStrategy
 
@@ -14,7 +15,6 @@ T = TypeVar("T", bound="BaseBroker")
 
 
 class BaseBroker(ABC):
-    """Base class for asynchronous broker implementations."""
 
     def __init__(self, pdt_strategy: Optional[BasePDTStrategy], tracer: trace.Tracer):
         """Initialize the broker with tracer support.
@@ -29,7 +29,7 @@ class BaseBroker(ABC):
         self._cash = None
         self._equity = None
         self._day_trade_count = None
-        self._updated_dt = None
+        self._updated_dt = TradingDateTime.now()
         self._is_stale_flag = True
 
     @classmethod
@@ -45,6 +45,7 @@ class BaseBroker(ABC):
         with self._tracer.start_as_current_span("BaseBroker.create") as span:
             try:
                 await self._initialize()
+                await self._stale_handler()
             except Exception as e:
                 span.record_exception(e)
                 span.set_status(trace.StatusCode.ERROR)
@@ -52,6 +53,141 @@ class BaseBroker(ABC):
             else:
                 span.set_status(trace.StatusCode.OK)
 
+            return self
+
+    @abstractmethod
+    def _initialize(self):
+        pass
+
+    @abstractmethod
+    async def _refresh(self):
+        pass
+
+    @abstractmethod
+    async def _place_order(self, symbol: str, side: OrderSide, dollar_amount: Money) -> None:
+        """
+        Implement the low-level order placement logic specific to the subclass (e.g., interaction with the API).
+        """
+        pass
+
+    @abstractmethod
+    async def _cancel_all_orders(self) -> None:
+        """
+        Implement the low-level order cancellation logic specific to the subclass (e.g., interaction with the API).
+        """
+        pass
+
+    async def get_available_cash(self) -> Money:
+        with self._tracer.start_as_current_span("BaseBroker.get_cash") as span:
+            await self._stale_handler()
+            span.set_attribute("cash", str(self._cash))
+            span.set_status(trace.StatusCode.OK)
+            return self._cash
+
+    async def get_position(self, symbol: str) -> Optional[Position]:
+        with self._tracer.start_as_current_span("BaseBroker.get_position") as span:
+            await self._stale_handler()
+            position = self._positions.get(symbol, None)
+            span.set_attribute("position", str(position))
+            span.set_status(trace.StatusCode.OK)
+            return position
+
+    async def get_positions(self) -> Optional[Dict[str, Position]]:
+        with self._tracer.start_as_current_span("BaseBroker.get_positions") as span:
+            await self._stale_handler()
+            span.set_attribute("positions_count", len(self._positions))
+            span.set_status(trace.StatusCode.OK)
+            return self._positions
+
+    async def get_equity(self) -> Money:
+        with self._tracer.start_as_current_span("BaseBroker.get_equity") as span:
+            await self._stale_handler()
+            span.set_attribute("equity", str(self._equity))
+            span.set_status(trace.StatusCode.OK)
+            return self._equity
+
+    async def get_account_exposure(self) -> Decimal:
+        with self._tracer.start_as_current_span("BaseBroker.get_account_exposure") as span:
+            await self._stale_handler()
+            if self._equity.amount == 0:
+                span.set_status(trace.StatusCode.OK)
+                span.set_attribute("account_exposure", "0")
+                return Decimal(0)
+            exposure = (
+                sum([position.quantity * position.average_cost.amount for position in self._positions.values()])
+                / self._equity.amount
+            )
+            span.set_attribute("account_exposure", str(exposure))
+            span.set_status(trace.StatusCode.OK)
+            return exposure
+
+    async def get_position_exposure(self, symbol: str) -> Decimal:
+        with self._tracer.start_as_current_span("BaseBroker.get_position_exposure") as span:
+            await self._stale_handler()
+            position = self._positions.get(symbol, None)
+            if position is None:
+                span.set_status(trace.StatusCode.OK)
+                return Decimal(0)
+            if self._equity.amount == 0:
+                span.set_status(trace.StatusCode.OK)
+                return Decimal(0)
+            exposure = position.quantity * position.average_cost.amount / self._equity.amount
+            span.set_attribute("exposure", str(exposure))
+            span.set_status(trace.StatusCode.OK)
+            return exposure
+
+    async def place_order(self, symbol: str, side: OrderSide, dollar_amount: Money) -> None:
+        """
+        This is the concrete place_order method in BaseBroker.
+        It performs a state refresh check, runs PDT logic, delegates to the implementation-specific _execute_order,
+        and then marks the state as stale.
+        """
+        with self._tracer.start_as_current_span("BaseBroker.place_order") as span:
+            await self._stale_handler()
+
+            self._validate_pre_order(symbol, side)
+            await self._place_order(symbol, side, dollar_amount)
+            self._is_stale_flag = True
+            span.set_status(trace.StatusCode.OK)
+            span.add_event(
+                "Order opened successfully: symbol={}, side={}, dollar_amount={}".format(symbol, side, dollar_amount)
+            )
+
+    async def cancel_all_orders(self) -> None:
+        with self._tracer.start_as_current_span("BaseBroker.cancel_all_orders") as span:
+            await self._cancel_all_orders()
+            self._is_stale_flag = True
+            await self._stale_handler()
+            span.set_status(trace.StatusCode.OK)
+
+    def _validate_pre_order(self, symbol: str, side: OrderSide) -> None:
+        if side == OrderSide.BUY:
+            allowed = self._pdt_strategy.check_pdt_open_safely(0, self._day_trade_count)
+            if not allowed:
+                raise Exception("PDT restrictions prevent opening a new position.")
+        elif side == OrderSide.SELL:
+            # In a full implementation the broker would determine if the existing position was opened today.
+            position = self._positions.get(symbol)
+            # Here we use a simplification: if the position exists, assume it was opened today.
+            position_opened_today = bool(position)
+            allowed = self._pdt_strategy.check_pdt_close_safely(position_opened_today, self._day_trade_count)
+            if not allowed:
+                raise Exception("PDT restrictions prevent closing this position.")
+        # Additional common verifications can be incorporated here.
+
+    def _clear_current_state(self) -> None:
+        with self._tracer.start_as_current_span("BaseBroker._clear_current_state") as span:
+            span.add_event("clearing current state")
+            self._cash = None
+            self._positions = None
+            self._equity = None
+            self._day_trade_count = None
+            self._updated_dt = None
+            span.set_status(trace.StatusCode.OK)
+
+    def _is_state_in_good_order(self) -> None:
+        with self._tracer.start_as_current_span("BaseBroker._is_state_in_good_order") as span:
+            span.add_event("checking if state is in good order")
             if self._cash is None:
                 span.record_exception(ValueError("Cash is not initialized"))
                 span.set_status(trace.StatusCode.ERROR)
@@ -66,6 +202,11 @@ class BaseBroker(ABC):
                 )
                 span.set_status(trace.StatusCode.ERROR)
                 raise ValueError("BaseBroker.positions is not a dictionary of the form {symbol: Position}")
+            for position in self._positions.values():
+                if not isinstance(position, Position):
+                    span.record_exception(ValueError("BaseBroker.positions contains non-Position objects"))
+                    span.set_status(trace.StatusCode.ERROR)
+                    raise ValueError("BaseBroker.positions contains non-Position objects")
             if self._equity is None:
                 span.record_exception(
                     ValueError("Equity is not initialized. The subclass _refresh() method must set this.")
@@ -78,48 +219,32 @@ class BaseBroker(ABC):
                 )
                 span.set_status(trace.StatusCode.ERROR)
                 raise ValueError("Day trade count is not initialized. The subclass _refresh() method must set this.")
-            if self._updated_dt is None:
-                span.record_exception(
-                    ValueError("Updated datetime is not initialized. The subclass _refresh() method must set this.")
-                )
-                span.set_status(trace.StatusCode.ERROR)
-                raise ValueError("Updated datetime is not initialized. The _refresh() method must set this.")
-            return self
+            span.set_status(trace.StatusCode.OK)
 
-    @abstractmethod
-    def _initialize(self):
-        pass
+    async def _stale_handler(self) -> bool:
+        with self._tracer.start_as_current_span("BaseBroker._stale_handler") as span:
+            # Use existing staleness logic (or refactor as needed)
+            if self._updated_dt.timestamp < TradingDateTime.now().timestamp - timedelta(minutes=10):
+                span.add_event("stale_state_detected due to timestamp difference")
+                self._is_stale_flag = True
+                span.add_event("_is_stale_flag set to True")
 
-    @abstractmethod
-    async def get_cash(self) -> Money:
-        pass
+            if self._is_stale_flag:
+                self._clear_current_state()
+                await self._refresh()
+                self._updated_dt = TradingDateTime.now()
+                self._is_state_in_good_order()
 
-    @abstractmethod
-    async def get_position(self, security: Security) -> Optional[Position]:
-        pass
-
-    @abstractmethod
-    async def get_positions(self) -> Optional[Dict[str, Position]]:
-        pass
-
-    @abstractmethod
-    async def get_equity(self) -> Money:
-        pass
-
-    @abstractmethod
-    async def get_account_exposure(self) -> Decimal:
-        pass
-
-    @abstractmethod
-    async def get_position_exposure(self, security: Security) -> Decimal:
-        pass
+            self._is_stale_flag = False
+            span.add_event("_is_stale_flag set to False")
+            span.set_status(trace.StatusCode.OK)
 
     async def __aenter__(self):
         """Enter the async context manager.
 
         Example:
             async with await Broker().create() as broker:
-                cash = await broker.get_cash()
+                cash = await broker.get_available_cash()
 
         Returns:
             self: The broker instance

@@ -12,8 +12,8 @@ description = "Trading strategy parser and executor"
 dependencies = [
     "yfinance==0.2.51",
     "aiohttp==3.11.11",
-    "opentelemetry-api==1.29.0",
-    "opentelemetry-sdk==1.29.0",
+    "opentelemetry-api==1.30.0",
+    "opentelemetry-sdk==1.30.0",
     "pydantic==2.10.6",
 ]
 

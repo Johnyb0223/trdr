@@ -1,0 +1,29 @@
+STRATEGY
+    NAME "Basic Strategy"
+    DESCRIPTION "Basic testing strategy"
+    ENTRY
+        ALL_OF
+            MA5 CROSSED_ABOVE MA20
+            MA20 > MA50
+            CURRENT_PRICE > 100
+            CURRENT_VOLUME > 1000
+    EXIT
+        ANY_OF
+            CURRENT_PRICE > (AVERAGE_COST * 1.06)
+            CURRENT_PRICE < (AVERAGE_COST * 0.98)
+    SIZING
+        RULE
+            CONDITION
+                ANY_OF
+                    AVAILABLE_CASH > 10000
+                    CURRENT_PRICE > 5000        
+            DOLLAR_AMOUNT 
+                2000
+        RULE
+            CONDITION
+                ALL_OF
+                    ACCOUNT_EXPOSURE < 0.5
+                    OPEN_POSITIONS < 3
+            DOLLAR_AMOUNT 
+                (AVAILABLE_CASH * 0.20)
+    

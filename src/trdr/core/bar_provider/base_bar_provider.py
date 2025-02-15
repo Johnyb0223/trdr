@@ -2,7 +2,7 @@ from typing import List, Type, Optional, TypeVar
 from abc import ABC, abstractmethod
 from opentelemetry import trace
 
-from .models import Bar
+from .models import Security
 
 T = TypeVar("T", bound="BaseBarProvider")
 
@@ -37,9 +37,5 @@ class BaseBarProvider(ABC):
         raise NotImplementedError("This method must be implemented by user defined data providers")
 
     @abstractmethod
-    def get_current_bar(self, symbol: str) -> Bar:
-        raise NotImplementedError("This method must be implemented by user defined data providers")
-
-    @abstractmethod
-    def get_bars(self, symbol: str, lookback: int) -> List[Bar]:
+    def get_security_list(self) -> List[Security]:
         raise NotImplementedError("This method must be implemented by user defined data providers")
