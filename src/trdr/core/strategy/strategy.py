@@ -2,12 +2,12 @@ from typing import Type, TypeVar, Dict, Any
 from opentelemetry import trace
 
 from ..broker.base_broker import BaseBroker
-from ..bar_provider.base_bar_provider import BaseBarProvider, Security
 from ...dsl.dsl_loader import StrategyDSLLoader
 from .models import StrategyContext, ContextIdentifier
 from ..broker.models import OrderSide
 from ..shared.models import Timeframe
-
+from ..security_provider.base_security_provider import BaseSecurityProvider
+from ..security_provider.models import Security
 
 T = TypeVar("T", bound="Strategy")
 
@@ -17,7 +17,7 @@ class Strategy:
         self,
         strategy_file_name: str,
         broker: BaseBroker,
-        bar_provider: BaseBarProvider,
+        security_provider: BaseSecurityProvider,
         tracer: trace.Tracer = trace.NoOpTracer,
         _from_create: bool = False,
     ):
@@ -25,7 +25,7 @@ class Strategy:
             raise TypeError("Use BaseStrategy.create() instead to create a new strategy")
         self.strategy_file_name = strategy_file_name
         self.broker = broker
-        self.bar_provider = bar_provider
+        self.security_provider = security_provider
         self._tracer = tracer
         self.strategy_ast = None
 
@@ -34,10 +34,10 @@ class Strategy:
         cls: Type[T],
         strategy_file_name: str,
         broker: BaseBroker,
-        bar_provider: BaseBarProvider,
+        security_provider: BaseSecurityProvider,
         tracer: trace.Tracer = trace.NoOpTracer,
     ) -> T:
-        self = cls(strategy_file_name, broker, bar_provider, tracer, _from_create=True)
+        self = cls(strategy_file_name, broker, security_provider, tracer, _from_create=True)
         with self._tracer.start_as_current_span("BaseStrategy.create") as span:
             try:
                 await self._load_strategy()
@@ -94,7 +94,7 @@ class Strategy:
         await self.broker._cancel_all_orders()
 
         # get a list of all traded securities
-        list_of_securities = await self.bar_provider.get_security_list()
+        list_of_securities = await self.security_provider.get_security_list()
 
         # evaluate the strategy for each security
         for security in list_of_securities:

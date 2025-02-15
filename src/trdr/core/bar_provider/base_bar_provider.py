@@ -2,7 +2,7 @@ from typing import List, Type, Optional, TypeVar
 from abc import ABC, abstractmethod
 from opentelemetry import trace
 
-from .models import Security
+from .models import Bar
 
 T = TypeVar("T", bound="BaseBarProvider")
 
@@ -37,5 +37,36 @@ class BaseBarProvider(ABC):
         raise NotImplementedError("This method must be implemented by user defined data providers")
 
     @abstractmethod
-    def get_security_list(self) -> List[Security]:
+    async def get_symbols(self) -> List[str]:
+        """Get the list of symbols supported by the data provider.
+
+        Returns:
+            List[str]: A list of symbol strings
+        """
+        raise NotImplementedError("This method must be implemented by user defined data providers")
+
+    @abstractmethod
+    async def get_bars(self, symbol: str, lookback: int) -> List[Bar]:
+        """Get bars for a specific symbol.
+
+        Args:
+            symbol: The ticker symbol to get bars for
+            lookback: The number of bars to return
+
+        Raises:
+            SymbolNotFoundException: If the symbol is not found in the data cache
+            InsufficientBarsException: If the number of bars requested is greater than the number of bars available
+        """
+        raise NotImplementedError("This method must be implemented by user defined data providers")
+
+    @abstractmethod
+    async def get_current_bar(self, symbol: str) -> Bar:
+        """Get the current bar for a specific symbol.
+
+        Args:
+            symbol: The ticker symbol to get the current bar for
+
+        Raises:
+            DataSourceException: If the data source returns an error or no data is returned
+        """
         raise NotImplementedError("This method must be implemented by user defined data providers")
