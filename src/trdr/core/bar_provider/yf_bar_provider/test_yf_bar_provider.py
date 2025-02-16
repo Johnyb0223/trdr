@@ -26,11 +26,18 @@ def fake_yf_download(self, start, end, group_by, interval):
         ("MSFT", "Low"): [190, 191, 192],
         ("MSFT", "Close"): [205, 206, 207],
         ("MSFT", "Volume"): [2000, 2100, 2200],
+        # this is what is returned when a symbol is not found
         ("ABCDEFG", "Open"): [None, None, None],
         ("ABCDEFG", "High"): [None, None, None],
         ("ABCDEFG", "Low"): [None, None, None],
         ("ABCDEFG", "Close"): [None, None, None],
         ("ABCDEFG", "Volume"): [None, None, None],
+        # this is what is returned when we hit the rate limit
+        ("AMZN", "Open"): None,
+        ("AMZN", "High"): None,
+        ("AMZN", "Low"): None,
+        ("AMZN", "Close"): None,
+        ("AMZN", "Volume"): None,
     }
 
     return pd.DataFrame(data, index=dates)
@@ -39,13 +46,21 @@ def fake_yf_download(self, start, end, group_by, interval):
 @pytest.fixture(scope="function")
 def yf_bar_provider_with_fake_data(monkeypatch):
     monkeypatch.setattr(yf, "download", fake_yf_download)
-    monkeypatch.setattr(yf.shared, "_ERRORS", {"ABCDEFG": "YFTzMissingError()"})
-    return asyncio.run(YFBarProvider.create(["AAPL", "MSFT", "ABCDEFG"]))
+    monkeypatch.setattr(yf.shared, "_ERRORS", {"ABCDEFG": "YFTzMissingError()", "AMZN": "JSONDecodeError()"})
+    return asyncio.run(YFBarProvider.create(["AAPL", "MSFT", "ABCDEFG", "AMZN"]))
+
+
+def test_that_only_symbols_with_data_are_in_the_data_cache(yf_bar_provider_with_fake_data):
+    data_cache_symbols = set(yf_bar_provider_with_fake_data._data_cache.keys())
+    assert data_cache_symbols == {"AAPL", "MSFT"}
 
 
 def test_get_symbols_returns_a_list_of_symbols(yf_bar_provider_with_fake_data):
     expected_symbols = {"AAPL", "MSFT"}
-    actual_symbols = set(yf_bar_provider_with_fake_data.get_symbols())
+    actual_symbols = yf_bar_provider_with_fake_data.get_symbols()
+    assert isinstance(actual_symbols, list)
+    # convert to set so order doesn't matter when we compare
+    actual_symbols = set(actual_symbols)
     assert actual_symbols == expected_symbols
 
 
@@ -60,16 +75,17 @@ def test_gets_bars_throws_exception_when_no_bars_are_available_for_a_symbol(yf_b
         bars = asyncio.run(yf_bar_provider_with_fake_data.get_bars("ABCDEFG", 200))
 
 
+def test_get_bars_throws_exception_when_symbol_is_not_in_data_cache(yf_bar_provider_with_fake_data):
+    with pytest.raises(NoBarsForSymbolException):
+        bars = asyncio.run(yf_bar_provider_with_fake_data.get_bars("ABCDEFG", 200))
+
+
 def test_provider_throws_exception_when_data_source_returns_error(monkeypatch):
+    # ensure we raise an exception when the data source returns an error that is not a missing symbol error
     with pytest.raises(BarProviderException):
         monkeypatch.setattr(yf, "download", fake_yf_download)
         monkeypatch.setattr(yf.shared, "_ERRORS", {"ABCDEFG": "RandomYFError()"})
         bars = asyncio.run(YFBarProvider.create(["ABCDEFG"]))
-
-
-def test_get_bars_throws_exception_when_symbol_is_not_in_data_cache(yf_bar_provider_with_fake_data):
-    with pytest.raises(NoBarsForSymbolException):
-        bars = asyncio.run(yf_bar_provider_with_fake_data.get_bars("ABCDEFG", 200))
 
 
 def test_get_bars_throws_exception_when_lookback_is_greater_than_the_number_of_bars_available(
@@ -79,9 +95,17 @@ def test_get_bars_throws_exception_when_lookback_is_greater_than_the_number_of_b
         bars = asyncio.run(yf_bar_provider_with_fake_data.get_bars("AAPL", 4))
 
 
-def test_get_current_bar_throws_exception_when_no_bars_are_available_for_a_symbol(yf_bar_provider_with_fake_data):
+def test_get_current_bar_throws_exception_when_no_bars_are_available_for_a_symbol(monkeypatch):
     with pytest.raises(NoBarsForSymbolException):
-        bar = asyncio.run(yf_bar_provider_with_fake_data.get_current_bar("ABCDEFG"))
+        """
+        Any time yf.download() is called, we clear the yf.shared._ERRORS dictionary after we are done inspecting it. Therefore, when we call yf.download() in the get_current_bar() method, we need to set the yf.shared._ERRORS dictionary again to the expected value of the test.
+        """
+        monkeypatch.setattr(yf, "download", fake_yf_download)
+        monkeypatch.setattr(yf.shared, "_ERRORS", {"ABCDEFG": "YFTzMissingError()"})
+        yf_bar_provider = asyncio.run(YFBarProvider.create(["ABCDEFG"]))
+        # yf.shared._ERRORS is currently {} as we reset it after the yf.download() call that occurs during initialization of the bar provider.
+        monkeypatch.setattr(yf.shared, "_ERRORS", {"ABCDEFG": "YFTzMissingError()"})
+        bar = asyncio.run(yf_bar_provider.get_current_bar("ABCDEFG"))
 
 
 def test_get_current_bar_throws_exception_when_data_source_returns_error(monkeypatch):

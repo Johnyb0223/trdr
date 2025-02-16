@@ -21,14 +21,16 @@ class Money:
     amount: Decimal
     currency: str = "USD"  # Default to USD since most trading is in dollars
 
-    def __init__(self, amount: Union[str, Decimal, Decimal], currency: str = "USD"):
+    def __init__(self, amount: Union[str, Decimal], currency: str = "USD"):
         """Initialize a Money object.
 
         Args:
             amount: The monetary amount as string, Decimal or Decimal
             currency: The currency code, defaults to USD
         """
-        # Use object.__setattr__ since we're frozen
+        if amount is None:
+            raise ValueError("Amount cannot be None")
+
         object.__setattr__(self, "amount", Decimal(str(amount)))
         object.__setattr__(self, "currency", currency)
 
@@ -150,6 +152,7 @@ class TradingDateTime:
 
 
 class Timeframe(Enum):
+    m15 = 900
     d1 = 86400
     d5 = 432000
     d20 = 1728000
@@ -162,6 +165,7 @@ class Timeframe(Enum):
 
     def to_yf_interval(self) -> str:
         return {
+            "m15": "15m",
             "d1": "1d",
             "d5": "5d",
             "d20": "20d",
@@ -175,6 +179,7 @@ class Timeframe(Enum):
 
     def __str__(self) -> str:
         name_map = {
+            "m15": "15 minutes",
             "d1": "1 day",
             "d5": "5 days",
             "d20": "20 days",

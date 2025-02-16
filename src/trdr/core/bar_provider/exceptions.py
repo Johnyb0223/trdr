@@ -6,6 +6,10 @@ class BarProviderException(Exception):
     pass
 
 
+class BarConversionException(BarProviderException):
+    pass
+
+
 class DataSourceException(BarProviderException):
     """
     This exception represents the case where the data source returns an error other than a NoBarsForSymbolException.

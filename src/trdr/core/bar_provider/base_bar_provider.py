@@ -10,20 +10,18 @@ T = TypeVar("T", bound="BaseBarProvider")
 class BaseBarProvider(ABC):
     def __init__(
         self,
-        symbols: List[str],
         tracer: trace.Tracer,
     ):
-        self._symbols = set(symbols)
         self._data_cache = {}
         self._tracer = tracer
 
     @classmethod
     async def create(cls: Type[T], symbols: List[str], tracer: Optional[trace.Tracer] = trace.NoOpTracer()) -> T:
         self = cls.__new__(cls)
-        BaseBarProvider.__init__(self, symbols, tracer)
+        BaseBarProvider.__init__(self, tracer)
         with self._tracer.start_as_current_span("BaseBarProvider.create") as span:
             try:
-                await self._initialize()
+                await self._initialize(symbols)
             except Exception as e:
                 span.record_exception(e)
                 span.set_status(trace.StatusCode.ERROR)
@@ -33,17 +31,24 @@ class BaseBarProvider(ABC):
         return self
 
     @abstractmethod
-    async def _initialize(self) -> None:
+    async def _initialize(self, symbols: List[str]) -> None:
+        """
+        This abstract method MUST be implemented by user defined data providers.
+        - This method SHOULD use the symbols argument to initialize the data cache.
+        - After the method has completed, the self._data_cache dictionary MUST be a dictionary where the keys are the symbols and the values are lists of Bars.
+        - The self._data_cache dictionary must only contain key,value pairs for symbols that have data available.
+        """
         raise NotImplementedError("This method must be implemented by user defined data providers")
 
     @abstractmethod
     async def get_symbols(self) -> List[str]:
-        """Get the list of symbols supported by the data provider.
+        """
+        Get the list of symbols with data available.
 
         Returns:
-            List[str]: A list of symbol strings
+            List[str]: List of symbols.
         """
-        raise NotImplementedError("This method must be implemented by user defined data providers")
+        pass
 
     @abstractmethod
     async def get_bars(self, symbol: str, lookback: int) -> List[Bar]:
@@ -61,12 +66,17 @@ class BaseBarProvider(ABC):
 
     @abstractmethod
     async def get_current_bar(self, symbol: str) -> Bar:
-        """Get the current bar for a specific symbol.
+        """
+        Get the current bar for a symbol.
 
         Args:
-            symbol: The ticker symbol to get the current bar for
+            symbol (str): The symbol to get the current bar for.
+
+        Returns:
+            Bar: The current bar for the symbol.
 
         Raises:
-            DataSourceException: If the data source returns an error or no data is returned
+            BarProviderException: If we receive an error not associated with the symbol of interest or if we receive an error not related to a no data error.
+            NoBarsForSymbolException: If we didn't receive any data for the symbol of interest.
         """
-        raise NotImplementedError("This method must be implemented by user defined data providers")
+        pass
