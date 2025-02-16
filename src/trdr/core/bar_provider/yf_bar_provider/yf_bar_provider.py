@@ -68,7 +68,6 @@ class YFBarProvider(BaseBarProvider):
                 span.set_status(trace.Status(trace.StatusCode.ERROR))
                 raise e
             else:
-
                 for symbol in symbols_with_data:
                     try:
                         symbol_data = data.xs(symbol, level=0, axis=1)
@@ -78,10 +77,7 @@ class YFBarProvider(BaseBarProvider):
                         continue
                     except Exception as e:
                         span.set_status(trace.Status(trace.StatusCode.ERROR))
-                        e = BarProviderException(f"Error converting data for symbol: {symbol} to bars")
-                        span.record_exception(e)
                         raise e
-
                 span.set_attribute(
                     "number_of_symbols_with_data_that_failed_to_convert_to_bars",
                     len(symbols_with_data) - len(self._data_cache.keys()),
@@ -101,10 +97,8 @@ class YFBarProvider(BaseBarProvider):
             pd.DataFrame: DataFrame containing the stock data.
         """
         with self._tracer.start_as_current_span("YFBarProvider._fetch_batch_stock_data") as span:
-
             end_datetime = TradingDateTime.now().timestamp
             start_datetime = end_datetime - timedelta(days=300)
-
             span.set_attribute("total_symbols_to_fetch_data_for", len(symbols))
             span.set_attribute("start_datetime", str(start_datetime))
             span.set_attribute("end_datetime", str(end_datetime))
@@ -185,22 +179,16 @@ class YFBarProvider(BaseBarProvider):
                         volume=int(row["Volume"]),
                     )
                     bars.append(bar)
-                except Exception as e:
+                except Exception as lower_e:
                     bar_creation_errors += 1
                     if bar_creation_errors / total_rows > 0.05:
-                        span.add_event(
-                            "bar_conversion_error_threshold_reached",
-                            {
-                                "total_rows": total_rows,
-                                "bar_creation_errors": bar_creation_errors,
-                            },
-                        )
                         span.set_status(trace.Status(trace.StatusCode.ERROR))
                         e = BarConversionException(
                             f"failed to convert {bar_creation_errors} out of {total_rows} rows to Bars"
                         )
+                        span.set_attribute("exception.cause", lower_e)
                         span.record_exception(e)
-                        raise e
+                        raise e from lower_e
             span.set_attribute("bars_created", len(bars))
             span.set_attribute("bar_creation_errors", bar_creation_errors)
             span.set_status(trace.Status(trace.StatusCode.OK))
@@ -216,8 +204,7 @@ class YFBarProvider(BaseBarProvider):
             span.add_event("begin_current_bar_data_fetch")
             data = yf.download(
                 symbol,
-                start=TradingDateTime.now().timestamp - timedelta(days=1),
-                end=TradingDateTime.now().timestamp,
+                period=Timeframe.d1.to_yf_interval(),
                 interval=Timeframe.m15.to_yf_interval(),
                 group_by="ticker",
             )
@@ -240,7 +227,7 @@ class YFBarProvider(BaseBarProvider):
                     If we didn't receive any data for the symbol of interest we can't construct the current bar.
                     """
                     span.set_status(trace.Status(trace.StatusCode.ERROR))
-                    e = NoBarsForSymbolException(f"Failed to fetch current bar for symbol: {symbol}")
+                    e = NoBarsForSymbolException(f"{symbol}")
                     span.record_exception(e)
                     raise e
                 """

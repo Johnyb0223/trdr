@@ -8,7 +8,7 @@ from trdr.core.bar_provider.yf_bar_provider.yf_bar_provider import YFBarProvider
 from trdr.core.bar_provider.exceptions import NoBarsForSymbolException, BarProviderException, InsufficientBarsException
 
 
-def fake_yf_download(self, start, end, group_by, interval):
+def fake_yf_download(self, *args, **kwargs):
     """
     This return fake batch stock data for two symbols. This is what yahoo finance returns for a batch download request
     grouped by symbol over a 3 day period.

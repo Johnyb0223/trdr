@@ -20,7 +20,7 @@ if __name__ == "__main__":
         trace.set_tracer_provider(tracer_provider)
         tracer = trace.get_tracer("trdr")
         try:
-            bar_provider = await YFBarProvider.create(test_symbols, tracer)
+            bar_provider = await YFBarProvider.create(["AAPL"], tracer)
             print(await bar_provider.get_current_bar("AAPL"))
             # async with await MockBroker.create(tracer=tracer) as broker:
             #     security_provider = await SecurityProvider.create(bar_provider, tracer)
