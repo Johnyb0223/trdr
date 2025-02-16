@@ -7,10 +7,18 @@ class BarProviderException(Exception):
 
 
 class DataSourceException(BarProviderException):
+    """
+    This exception represents the case where the data source returns an error other than a NoBarsForSymbolException.
+    """
+
     pass
 
 
 class NoBarsForSymbolException(DataSourceException):
+    """
+    This exception represents the case wehre Yahoo Fincance cannot return any data for a symbol.
+    """
+
     symbol: str
 
     def __init__(self, symbol: str):

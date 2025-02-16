@@ -98,13 +98,25 @@ class YFBarProvider(BaseBarProvider):
             )
             span.add_event("data_fetch_complete")
             if yf.shared._ERRORS:
-                error_msg = "; ".join(yf.shared._ERRORS.values())
-                span.set_status(trace.Status(trace.StatusCode.ERROR))
-                e = BarProviderException(f"YFinance errors: {error_msg}")
-                span.record_exception(e)
-                raise e
+                symbols_with_no_data = [
+                    symbol for symbol, error in yf.shared._ERRORS.items() if "YFTzMissingError" in error
+                ]
+                for symbol in symbols_with_no_data:
+                    if symbol in self._symbols:
+                        self._symbols.remove(symbol)
 
-            span.set_status(trace.Status(trace.StatusCode.OK))
+                # Gather any other errors.
+                other_errors = [error for error in yf.shared._ERRORS.values() if "YFTzMissingError" not in error]
+                if other_errors:
+                    error_msg = "; ".join(other_errors)
+                    span.set_status(trace.Status(trace.StatusCode.ERROR))
+                    e = BarProviderException(f"YFinance errors: {error_msg}")
+                    span.record_exception(e)
+                    raise e
+                else:
+                    span.set_status(trace.Status(trace.StatusCode.OK))
+                    if symbols_with_no_data:
+                        span.set_attribute("removed_symbols", symbols_with_no_data)
             return data
 
     def _convert_df_to_bars(self, df: pd.DataFrame) -> List[Bar]:
@@ -142,18 +154,24 @@ class YFBarProvider(BaseBarProvider):
             return bars
 
     def get_symbols(self) -> List[str]:
-        return self._symbols
+        return [symbol for symbol in self._symbols]
 
     async def get_current_bar(self, symbol: str) -> Money:
         with self._tracer.start_as_current_span("YFBarProvider.get_current_bar") as span:
             span.set_attribute("symbol", symbol)
             span.add_event("begin_current_bar_data_fetch")
-            data = yf.download(symbol, period="1d", interval="15m", group_by="ticker")
+            data = yf.download(
+                symbol,
+                start=TradingDateTime.now().timestamp - timedelta(days=1),
+                end=TradingDateTime.now().timestamp,
+                interval="15m",
+                group_by="ticker",
+            )
             span.add_event("current_bar_data_fetch_complete")
             if yf.shared._ERRORS:
                 error_msg = "; ".join(yf.shared._ERRORS.values())
                 span.set_status(trace.Status(trace.StatusCode.ERROR))
-                e = DataSourceException(f"YFinance errors: {error_msg}")
+                e = NoBarsForSymbolException(f"YFinance errors: {error_msg}")
                 span.record_exception(e)
                 raise e
 

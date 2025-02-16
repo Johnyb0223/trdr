@@ -18,7 +18,7 @@ class BaseBarProvider(ABC):
         self._tracer = tracer
 
     @classmethod
-    async def create(cls: Type[T], symbols: List[str], tracer: Optional[trace.Tracer] = trace.NoOpTracer) -> T:
+    async def create(cls: Type[T], symbols: List[str], tracer: Optional[trace.Tracer] = trace.NoOpTracer()) -> T:
         self = cls.__new__(cls)
         BaseBarProvider.__init__(self, symbols, tracer)
         with self._tracer.start_as_current_span("BaseBarProvider.create") as span:

@@ -18,7 +18,7 @@ class Strategy:
         strategy_file_name: str,
         broker: BaseBroker,
         security_provider: BaseSecurityProvider,
-        tracer: trace.Tracer = trace.NoOpTracer,
+        tracer: trace.Tracer = trace.NoOpTracer(),
         _from_create: bool = False,
     ):
         if not _from_create:
@@ -35,7 +35,7 @@ class Strategy:
         strategy_file_name: str,
         broker: BaseBroker,
         security_provider: BaseSecurityProvider,
-        tracer: trace.Tracer = trace.NoOpTracer,
+        tracer: trace.Tracer = trace.NoOpTracer(),
     ) -> T:
         self = cls(strategy_file_name, broker, security_provider, tracer, _from_create=True)
         with self._tracer.start_as_current_span("BaseStrategy.create") as span:

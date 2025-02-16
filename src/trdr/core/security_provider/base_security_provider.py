@@ -25,7 +25,7 @@ class BaseSecurityProvider(ABC):
 
     @classmethod
     async def create(
-        cls: Type[T], bar_provider: BaseBarProvider, tracer: Optional[trace.Tracer] = trace.NoOpTracer
+        cls: Type[T], bar_provider: BaseBarProvider, tracer: Optional[trace.Tracer] = trace.NoOpTracer()
     ) -> T:
         """Factory method to create a new security provider instance.
 
