@@ -8,7 +8,7 @@ version = "0.0.1"
 authors = [
     { name = "developer_jeb", email = "developer_jeb@outlook.com" },
 ]
-description = "Trading strategy parser and executor"
+description = "Algorithmic trading library"
 dependencies = [
     "yfinance==0.2.51",
     "aiohttp==3.11.11",
@@ -26,3 +26,4 @@ dev = [
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]
+asyncio_default_fixture_loop_scope = "function"

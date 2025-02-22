@@ -1,53 +1,10 @@
 import pytest
-import pandas as pd
-import datetime
 import asyncio
 import yfinance as yf
 
-from trdr.core.bar_provider.yf_bar_provider.yf_bar_provider import YFBarProvider
-from trdr.core.bar_provider.exceptions import NoBarsForSymbolException, BarProviderException, InsufficientBarsException
-
-
-def fake_yf_download(self, *args, **kwargs):
-    """
-    This return fake batch stock data for two symbols. This is what yahoo finance returns for a batch download request
-    grouped by symbol over a 3 day period.
-    """
-    dates = pd.bdate_range(end=datetime.datetime.now(), periods=3)
-
-    data = {
-        ("AAPL", "Open"): [100, 101, 102],
-        ("AAPL", "High"): [110, 111, 112],
-        ("AAPL", "Low"): [90, 91, 92],
-        ("AAPL", "Close"): [105, 106, 107],
-        ("AAPL", "Volume"): [1000, 1100, 1200],
-        ("MSFT", "Open"): [200, 201, 202],
-        ("MSFT", "High"): [210, 211, 212],
-        ("MSFT", "Low"): [190, 191, 192],
-        ("MSFT", "Close"): [205, 206, 207],
-        ("MSFT", "Volume"): [2000, 2100, 2200],
-        # this is what is returned when a symbol is not found
-        ("ABCDEFG", "Open"): [None, None, None],
-        ("ABCDEFG", "High"): [None, None, None],
-        ("ABCDEFG", "Low"): [None, None, None],
-        ("ABCDEFG", "Close"): [None, None, None],
-        ("ABCDEFG", "Volume"): [None, None, None],
-        # this is what is returned when we hit the rate limit
-        ("AMZN", "Open"): None,
-        ("AMZN", "High"): None,
-        ("AMZN", "Low"): None,
-        ("AMZN", "Close"): None,
-        ("AMZN", "Volume"): None,
-    }
-
-    return pd.DataFrame(data, index=dates)
-
-
-@pytest.fixture(scope="function")
-def yf_bar_provider_with_fake_data(monkeypatch):
-    monkeypatch.setattr(yf, "download", fake_yf_download)
-    monkeypatch.setattr(yf.shared, "_ERRORS", {"ABCDEFG": "YFTzMissingError()", "AMZN": "JSONDecodeError()"})
-    return asyncio.run(YFBarProvider.create(["AAPL", "MSFT", "ABCDEFG", "AMZN"]))
+from .yf_bar_provider import YFBarProvider
+from ..exceptions import NoBarsForSymbolException, BarProviderException, InsufficientBarsException
+from ....conftest import fake_yf_download
 
 
 def test_that_only_symbols_with_data_are_in_the_data_cache(yf_bar_provider_with_fake_data):
@@ -72,12 +29,12 @@ def test_get_symbols_returns_only_symbols_that_have_bars(yf_bar_provider_with_fa
 
 def test_gets_bars_throws_exception_when_no_bars_are_available_for_a_symbol(yf_bar_provider_with_fake_data):
     with pytest.raises(NoBarsForSymbolException):
-        bars = asyncio.run(yf_bar_provider_with_fake_data.get_bars("ABCDEFG", 200))
+        bars = asyncio.run(yf_bar_provider_with_fake_data.get_bars("ABCDEFG"))
 
 
 def test_get_bars_throws_exception_when_symbol_is_not_in_data_cache(yf_bar_provider_with_fake_data):
     with pytest.raises(NoBarsForSymbolException):
-        bars = asyncio.run(yf_bar_provider_with_fake_data.get_bars("ABCDEFG", 200))
+        bars = asyncio.run(yf_bar_provider_with_fake_data.get_bars("ABCDEFG"))
 
 
 def test_provider_throws_exception_when_data_source_returns_error(monkeypatch):

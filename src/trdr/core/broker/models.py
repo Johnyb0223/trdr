@@ -1,7 +1,7 @@
 from enum import Enum
 from decimal import Decimal
 from typing import Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from ..shared.models import Money, TradingDateTime
 
@@ -62,8 +62,7 @@ class Order(BaseModel):
     def __str__(self) -> str:
         return f"Order(quantity={self.quantity}, side={self.side}, status={self.status}, timestamp={self.timestamp})"
 
-    class Config:
-        arbitrary_types_allowed = True
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
 
 class PositionSide(Enum):
@@ -128,5 +127,4 @@ class Position(BaseModel):
     def __str__(self) -> str:
         return f"Position(quantity={self.quantity}, average_cost={self.average_cost}, side={self.side})"
 
-    class Config:
-        arbitrary_types_allowed = True
+    model_config = ConfigDict(arbitrary_types_allowed=True)

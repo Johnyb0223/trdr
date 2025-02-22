@@ -21,11 +21,10 @@ if __name__ == "__main__":
         tracer = trace.get_tracer("trdr")
         try:
             bar_provider = await YFBarProvider.create(["AAPL"], tracer)
-            print(await bar_provider.get_current_bar("AAPL"))
-            # async with await MockBroker.create(tracer=tracer) as broker:
-            #     security_provider = await SecurityProvider.create(bar_provider, tracer)
-            #     strategy = await Strategy.create("first-strat", broker, security_provider, tracer)
-            #     await strategy.execute()
+            async with await MockBroker.create(tracer=tracer) as broker:
+                security_provider = await SecurityProvider.create(bar_provider, tracer)
+                strategy = await Strategy.create("first-strat", broker, security_provider, tracer)
+                await strategy.execute()
 
         except Exception as e:
             print(e)

@@ -174,6 +174,9 @@ class Timeframe(Enum):
             "d200": "200d",
         }[self.name]
 
+    def is_intraday(self) -> bool:
+        return self.value < 86400
+
     def __index__(self) -> int:
         return self.to_days()
 

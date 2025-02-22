@@ -51,7 +51,7 @@ class BaseBarProvider(ABC):
         pass
 
     @abstractmethod
-    async def get_bars(self, symbol: str, lookback: int) -> List[Bar]:
+    async def get_bars(self, symbol: str, lookback: Optional[int] = None) -> List[Bar]:
         """Get bars for a specific symbol.
 
         Args:
@@ -59,7 +59,7 @@ class BaseBarProvider(ABC):
             lookback: The number of bars to return
 
         Raises:
-            SymbolNotFoundException: If the symbol is not found in the data cache
+            NoBarsForSymbolException: If the symbol is not found in the data cache
             InsufficientBarsException: If the number of bars requested is greater than the number of bars available
         """
         raise NotImplementedError("This method must be implemented by user defined data providers")

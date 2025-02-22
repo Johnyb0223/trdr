@@ -1,8 +1,8 @@
 from typing import List, Optional
-from opentelemetry import trace
-from pydantic import BaseModel, model_validator, Field
+from pydantic import BaseModel, model_validator, ConfigDict
 
 from ..bar_provider.models import Bar
+from ..bar_provider.exceptions import InsufficientBarsException
 from ..shared.models import Money, Timeframe
 
 
@@ -25,7 +25,6 @@ class Security(BaseModel):
     symbol: str
     current_bar: Bar
     bars: List[Bar]
-    tracer: Optional[trace.Tracer] = Field(default=trace.NoOpTracer(), exclude=True)
 
     def get_current_price(self) -> Money:
         """Returns the current price of the security.
@@ -43,22 +42,25 @@ class Security(BaseModel):
         """
         return self.current_bar.volume
 
-    def compute_average_volume(self, period: Timeframe, offset: int = 0) -> Optional[Money]:
+    def compute_average_volume(self, period: Optional[Timeframe]) -> Money:
         """
         Compute the average volume over a given period.
         The offset allows looking back in time (offset=0 computes the current average, offset=1 for previous day's average, etc.).
         """
+        if not period:
+            raise ValueError("Period cannot be None")
+        if period.is_intraday():
+            raise ValueError("Intraday timeframe not supported for average volume computation")
         relevant_bars = self.bars.copy()
-        if offset:
-            # Remove the most recent 'offset' bars to simulate calculation from a previous day.
-            relevant_bars = relevant_bars[:-offset]
         if len(relevant_bars) < period.to_days():
-            return None
+            raise InsufficientBarsException(
+                f"Not enough bars to compute average volume for {self.symbol} over {period}"
+            )
         index = period.to_days()
         sum_volumes = sum(bar.volume for bar in relevant_bars[-index:])
         return Money(sum_volumes // index)
 
-    def compute_moving_average(self, period: Timeframe, offset: int = 0) -> Optional[Money]:
+    def compute_moving_average(self, period: Optional[Timeframe]) -> Money:
         """
         Compute the moving average over a given period.
         The offset allows looking back in time (offset=0 computes the current average, offset=1 for previous day's average, etc.).
@@ -71,17 +73,20 @@ class Security(BaseModel):
             Optional[Money]: The computed moving average as a Money object, or None if insufficient data.
         """
         # Make a copy so we don't modify the actual list.
+        if not period:
+            raise ValueError("Period cannot be None")
+        if period.is_intraday():
+            raise ValueError("Intraday timeframe not supported for moving average computation")
         relevant_bars = self.bars.copy()
-        if offset:
-            # Remove the most recent 'offset' bars to simulate calculation from a previous day.
-            relevant_bars = relevant_bars[:-offset]
         if len(relevant_bars) < period.to_days():
             return None
         index = period.to_days()
         sum_prices = sum(bar.close.amount for bar in relevant_bars[-index:])
         return Money(sum_prices / index)
 
-    def has_bullish_moving_average_crossover(self, short_period: Timeframe, long_period: Timeframe) -> bool:
+    def has_bullish_moving_average_crossover(
+        self, short_period: Optional[Timeframe], long_period: Optional[Timeframe]
+    ) -> bool:
         """
         Determine if a bullish crossover occurred for two moving averages.
         That is, check if yesterday the short-term MA was below the long-term MA,
@@ -94,13 +99,16 @@ class Security(BaseModel):
         Returns:
             bool: True if a bullish crossover occurred, False otherwise.
         """
-        short_today = self.compute_moving_average(short_period, offset=0)
-        long_today = self.compute_moving_average(long_period, offset=0)
-        short_yesterday = self.compute_moving_average(short_period, offset=1)
-        long_yesterday = self.compute_moving_average(long_period, offset=1)
+        if not short_period or not long_period:
+            raise ValueError("Short or long period cannot be None")
+
+        short_today = self.compute_moving_average(short_period)
+        long_today = self.compute_moving_average(long_period)
+        short_yesterday = self.compute_moving_average(short_period)
+        long_yesterday = self.compute_moving_average(long_period)
 
         if None in (short_today, long_today, short_yesterday, long_yesterday):
-            return False
+            return None
 
         return short_yesterday.amount < long_yesterday.amount and short_today.amount > long_today.amount
 
@@ -121,35 +129,16 @@ class Security(BaseModel):
         Raises:
             ValueError: If any validation checks fail
         """
-        tracer = values.tracer
         bars = values.bars
         current_bar = values.current_bar
         symbol = values.symbol
 
-        with tracer.start_as_current_span("Security.validate_fields") as span:
-            # Validate symbol
-            if not isinstance(symbol, str):
-                span.set_status(trace.StatusCode.ERROR)
-                span.record_exception(ValueError("Symbol must be a string"))
-                raise ValueError("Symbol must be a string")
-            span.set_attribute("symbol", symbol)
-            span.add_event("symbol_validated")
-            # Validate bars
-            if not isinstance(bars, list):
-                span.set_status(trace.StatusCode.ERROR)
-                span.record_exception(ValueError("Bars must be a list"))
-                raise ValueError("Bars must be a list")
-            span.add_event("bars_validated")
-
-            # Validate current_bar
-            if not isinstance(current_bar, Bar):
-                span.set_status(trace.StatusCode.ERROR)
-                span.record_exception(ValueError("Current bar must be a Bar object"))
-                raise ValueError("Current bar must be a Bar object")
-            span.add_event("current_bar_validated")
-
-            span.set_status(trace.StatusCode.OK)
-            span.add_event("security_validated")
+        if not isinstance(symbol, str):
+            raise ValueError("Symbol must be a string")
+        if not isinstance(bars, list):
+            raise ValueError("Bars must be a list")
+        if not isinstance(current_bar, Bar):
+            raise ValueError("Current bar must be a Bar object")
 
         return values
 
@@ -163,7 +152,7 @@ class Security(BaseModel):
         )
 
     def to_json(self) -> str:
-        return self.model_dump_json(exclude={"tracer"}, indent=2)
+        return self.model_dump_json(indent=2)
 
     def __str__(self) -> str:
         """Returns a string representation of the Security.
@@ -173,5 +162,4 @@ class Security(BaseModel):
         """
         return f"Security(symbol={self.symbol}, current_bar={self.current_bar}, bars_count={len(self.bars)})"
 
-    class Config:
-        arbitrary_types_allowed = True
+    model_config = ConfigDict(arbitrary_types_allowed=True)

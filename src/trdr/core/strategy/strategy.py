@@ -63,6 +63,7 @@ class Strategy:
         for the Pydantic model.
         """
         context_data: Dict[ContextIdentifier, Any] = {}
+
         context_data[ContextIdentifier.MA5] = security.compute_moving_average(Timeframe.d5)
         context_data[ContextIdentifier.MA20] = security.compute_moving_average(Timeframe.d20)
         context_data[ContextIdentifier.MA50] = security.compute_moving_average(Timeframe.d50)
@@ -76,9 +77,11 @@ class Strategy:
         context_data[ContextIdentifier.CURRENT_VOLUME] = security.get_current_volume()
         context_data[ContextIdentifier.CURRENT_PRICE] = security.get_current_price()
         context_data[ContextIdentifier.ACCOUNT_EXPOSURE] = await self.broker.get_account_exposure()
+
         positions_dict = await self.broker.get_positions()
         context_data[ContextIdentifier.OPEN_POSITIONS] = len(positions_dict.keys())
         context_data[ContextIdentifier.AVAILABLE_CASH] = await self.broker.get_available_cash()
+
         current_position = await self.broker.get_position(security.symbol)
         if current_position:
             context_data[ContextIdentifier.AVERAGE_COST] = current_position.average_cost

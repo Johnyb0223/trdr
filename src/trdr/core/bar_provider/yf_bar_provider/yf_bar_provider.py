@@ -1,4 +1,4 @@
-from typing import List, Tuple
+from typing import List, Tuple, Optional
 from datetime import timedelta, timezone
 import yfinance as yf
 import pandas as pd
@@ -250,7 +250,7 @@ class YFBarProvider(BaseBarProvider):
     async def get_bars(
         self,
         symbol: str,
-        lookback: int,
+        lookback: Optional[int] = None,
     ) -> List[Bar]:
         """
         Get the bars for a symbol with a specified lookback period.
@@ -275,6 +275,8 @@ class YFBarProvider(BaseBarProvider):
                 e = NoBarsForSymbolException(symbol)
                 span.record_exception(e)
                 raise e
+            if lookback is None:
+                lookback = len(self._data_cache[symbol])
             if len(self._data_cache[symbol]) < lookback:
                 span.set_attribute("lookback_available_for_symbol", len(self._data_cache[symbol]))
                 span.add_event("lookback_too_large_for_symbol")
