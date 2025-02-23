@@ -60,7 +60,7 @@ class Identifier(Expression):
     def evaluate(self, context: StrategyContext) -> Any:
         # Retrieve the identifier's value from the context
         identifier = ContextIdentifier[self.name]
-        value = getattr(context, identifier.value)
+        value = getattr(context, identifier.value, None)
         if not value:
             raise MissingContextValue(f"Missing context value for {self.name}")
         if isinstance(value, Money):

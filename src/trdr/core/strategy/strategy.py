@@ -8,6 +8,7 @@ from ..broker.models import OrderSide
 from ..shared.models import Timeframe
 from ..security_provider.base_security_provider import BaseSecurityProvider
 from ..security_provider.models import Security
+from ...dsl.dsl_ast import MissingContextValue
 
 T = TypeVar("T", bound="Strategy")
 
@@ -76,41 +77,39 @@ class Strategy:
         context_data[ContextIdentifier.AV200] = security.compute_average_volume(Timeframe.d200)
         context_data[ContextIdentifier.CURRENT_VOLUME] = security.get_current_volume()
         context_data[ContextIdentifier.CURRENT_PRICE] = security.get_current_price()
-        context_data[ContextIdentifier.ACCOUNT_EXPOSURE] = await self.broker.get_account_exposure()
 
+        context_data[ContextIdentifier.ACCOUNT_EXPOSURE] = await self.broker.get_account_exposure()
         positions_dict = await self.broker.get_positions()
         context_data[ContextIdentifier.OPEN_POSITIONS] = len(positions_dict.keys())
         context_data[ContextIdentifier.AVAILABLE_CASH] = await self.broker.get_available_cash()
-
         current_position = await self.broker.get_position(security.symbol)
-        if current_position:
-            context_data[ContextIdentifier.AVERAGE_COST] = current_position.average_cost
-        else:
-            context_data[ContextIdentifier.AVERAGE_COST] = None
+        context_data[ContextIdentifier.AVERAGE_COST] = current_position.average_cost if current_position else None
 
         # Convert enum keys to strings for StrategyContext initialization.
         flat_context = {key.value: value for key, value in context_data.items()}
         return StrategyContext(**flat_context)
 
     async def execute(self) -> None:
-        # cancel all currently open orders
         await self.broker._cancel_all_orders()
-
-        # get a list of all traded securities
         list_of_securities = await self.security_provider.get_security_list()
 
-        # evaluate the strategy for each security
         for security in list_of_securities:
-            # Build context using the provided security.
             context = await self.build_context(security)
-
             current_position = await self.broker.get_position(security.symbol)
             if current_position:
-                if self.strategy_ast.evaluate_exit(context):
-                    await self.broker.place_order(security.symbol, OrderSide.SELL, current_position.quantity)
+                try:
+                    should_exit = self.strategy_ast.evaluate_exit(context)
+                except MissingContextValue as e:
+                    continue
+                else:
+                    if should_exit:
+                        await self.broker.place_order(security.symbol, OrderSide.SELL, current_position.quantity)
             else:
-                # if we don't have a position, evaluate the entry conditions
-                if self.strategy_ast.evaluate_entry(context):
-                    # determine the size of the order
-                    dollar_amount = self.strategy_ast.evaluate_sizing(context)
-                    await self.broker.place_order(security.symbol, OrderSide.BUY, dollar_amount)
+                try:
+                    should_enter = self.strategy_ast.evaluate_entry(context)
+                except MissingContextValue as e:
+                    continue
+                else:
+                    if should_enter:
+                        dollar_amount = self.strategy_ast.evaluate_sizing(context)
+                        await self.broker.place_order(security.symbol, OrderSide.BUY, dollar_amount)

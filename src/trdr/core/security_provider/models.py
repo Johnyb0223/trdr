@@ -42,7 +42,7 @@ class Security(BaseModel):
         """
         return self.current_bar.volume
 
-    def compute_average_volume(self, period: Optional[Timeframe], offset: int = 0) -> Money:
+    def compute_average_volume(self, period: Optional[Timeframe], offset: int = 0) -> int:
         """
         Compute the average volume over a given period.
         The offset allows looking back in time (offset=0 computes the current average, offset=1 for previous day's average, etc.).
@@ -56,9 +56,7 @@ class Security(BaseModel):
         days = period.to_days()
 
         if len(relevant_bars) < days + offset:
-            raise InsufficientBarsException(
-                f"Not enough bars to compute average volume for {self.symbol} over {period} with offset {offset}"
-            )
+            return None
 
         # Calculate the start and end indices for the window
         end_idx = len(relevant_bars) - offset
@@ -66,7 +64,7 @@ class Security(BaseModel):
 
         # Sum the volumes for the specified window
         sum_volumes = sum(bar.volume for bar in relevant_bars[start_idx:end_idx])
-        return Money(sum_volumes // days)
+        return sum_volumes // days
 
     def compute_moving_average(self, period: Optional[Timeframe], offset: int = 0) -> Money:
         """
@@ -119,13 +117,41 @@ class Security(BaseModel):
 
         short_today = self.compute_moving_average(short_period)
         long_today = self.compute_moving_average(long_period)
-        short_yesterday = self.compute_moving_average(short_period)
-        long_yesterday = self.compute_moving_average(long_period)
+        short_yesterday = self.compute_moving_average(short_period, 1)
+        long_yesterday = self.compute_moving_average(long_period, 1)
 
         if None in (short_today, long_today, short_yesterday, long_yesterday):
             return None
 
         return short_yesterday.amount < long_yesterday.amount and short_today.amount > long_today.amount
+
+    def has_bearish_moving_average_crossover(
+        self, short_period: Optional[Timeframe], long_period: Optional[Timeframe]
+    ) -> bool:
+        """
+        Determine if a bearish crossover occurred for two moving averages.
+        That is, check if yesterday the short-term MA was above the long-term MA,
+        and today the short-term MA has crossed below the long-term MA.
+
+        Args:
+            short_period (int): The period for the short-term moving average (e.g., 5 for MA5).
+            long_period (int): The period for the long-term moving average (e.g., 20 for MA20).
+
+        Returns:
+            bool: True if a bearish crossover occurred, False otherwise.
+        """
+        if not short_period or not long_period:
+            raise ValueError("Short or long period cannot be None")
+
+        short_today = self.compute_moving_average(short_period)
+        long_today = self.compute_moving_average(long_period)
+        short_yesterday = self.compute_moving_average(short_period, 1)
+        long_yesterday = self.compute_moving_average(long_period, 1)
+
+        if None in (short_today, long_today, short_yesterday, long_yesterday):
+            return None
+
+        return short_yesterday.amount > long_yesterday.amount and short_today.amount < long_today.amount
 
     @model_validator(mode="after")
     def validate_fields(cls, values):
