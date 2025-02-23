@@ -42,7 +42,7 @@ class Security(BaseModel):
         """
         return self.current_bar.volume
 
-    def compute_average_volume(self, period: Optional[Timeframe]) -> Money:
+    def compute_average_volume(self, period: Optional[Timeframe], offset: int = 0) -> Money:
         """
         Compute the average volume over a given period.
         The offset allows looking back in time (offset=0 computes the current average, offset=1 for previous day's average, etc.).
@@ -51,38 +51,53 @@ class Security(BaseModel):
             raise ValueError("Period cannot be None")
         if period.is_intraday():
             raise ValueError("Intraday timeframe not supported for average volume computation")
-        relevant_bars = self.bars.copy()
-        if len(relevant_bars) < period.to_days():
-            raise InsufficientBarsException(
-                f"Not enough bars to compute average volume for {self.symbol} over {period}"
-            )
-        index = period.to_days()
-        sum_volumes = sum(bar.volume for bar in relevant_bars[-index:])
-        return Money(sum_volumes // index)
 
-    def compute_moving_average(self, period: Optional[Timeframe]) -> Money:
+        relevant_bars = self.bars.copy()
+        days = period.to_days()
+
+        if len(relevant_bars) < days + offset:
+            raise InsufficientBarsException(
+                f"Not enough bars to compute average volume for {self.symbol} over {period} with offset {offset}"
+            )
+
+        # Calculate the start and end indices for the window
+        end_idx = len(relevant_bars) - offset
+        start_idx = end_idx - days
+
+        # Sum the volumes for the specified window
+        sum_volumes = sum(bar.volume for bar in relevant_bars[start_idx:end_idx])
+        return Money(sum_volumes // days)
+
+    def compute_moving_average(self, period: Optional[Timeframe], offset: int = 0) -> Money:
         """
         Compute the moving average over a given period.
         The offset allows looking back in time (offset=0 computes the current average, offset=1 for previous day's average, etc.).
 
         Args:
-            period (int): Number of bars to average over.
+            period (Timeframe): Timeframe to average over.
             offset (int, optional): How many bars back to shift the window. Defaults to 0.
 
         Returns:
-            Optional[Money]: The computed moving average as a Money object, or None if insufficient data.
+            Money: The computed moving average as a Money object.
         """
-        # Make a copy so we don't modify the actual list.
         if not period:
             raise ValueError("Period cannot be None")
         if period.is_intraday():
             raise ValueError("Intraday timeframe not supported for moving average computation")
+
         relevant_bars = self.bars.copy()
-        if len(relevant_bars) < period.to_days():
+        days = period.to_days()
+
+        if len(relevant_bars) < days + offset:
             return None
-        index = period.to_days()
-        sum_prices = sum(bar.close.amount for bar in relevant_bars[-index:])
-        return Money(sum_prices / index)
+
+        # Calculate the start and end indices for the window
+        end_idx = len(relevant_bars) - offset
+        start_idx = end_idx - days
+
+        # Sum the closing prices for the specified window
+        sum_prices = sum(bar.close.amount for bar in relevant_bars[start_idx:end_idx])
+        return Money(sum_prices / days)
 
     def has_bullish_moving_average_crossover(
         self, short_period: Optional[Timeframe], long_period: Optional[Timeframe]
@@ -141,15 +156,6 @@ class Security(BaseModel):
             raise ValueError("Current bar must be a Bar object")
 
         return values
-
-    @classmethod
-    def create_dummy_security(cls, symbol: str = "AAPL") -> "Security":
-        bars = Bar.create_dummy_bars(count=200)
-        return cls(
-            symbol=symbol,
-            current_bar=bars[-2],
-            bars=bars,
-        )
 
     def to_json(self) -> str:
         return self.model_dump_json(indent=2)

@@ -25,7 +25,6 @@ class ContextIdentifier(str, Enum):
     AV100 = "av100"
     AV200 = "av200"
     CURRENT_VOLUME = "current_volume"
-    RSI = "rsi"
     ACCOUNT_EXPOSURE = "account_exposure"
     OPEN_POSITIONS = "open_positions"
     AVAILABLE_CASH = "available_cash"
