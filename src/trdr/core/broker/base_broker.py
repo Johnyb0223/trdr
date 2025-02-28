@@ -17,12 +17,38 @@ T = TypeVar("T", bound="BaseBroker")
 
 
 class BaseBroker(ABC):
+    """
+    Abstract base class for executing trades and managing account information.
+    
+    The broker is responsible for:
+    1. Executing buy and sell orders
+    2. Tracking positions, cash, and equity values
+    3. Enforcing Pattern Day Trading (PDT) rules
+    4. Managing authentication and communication with trading APIs
+    
+    All broker implementations should provide proper state management, with
+    automatic refreshing of stale data and complete OpenTelemetry instrumentation.
+    The broker maintains several internal state variables that track account values,
+    including equity, cash, and positions.
+    
+    Attributes:
+        _session: HTTP client session for API communication
+        _pdt_strategy: Strategy for enforcing Pattern Day Trading rules
+        _tracer: OpenTelemetry tracer for instrumentation
+        _positions: Dictionary of current positions (symbol → Position)
+        _cash: Available cash in the account
+        _equity: Total account value (cash + positions)
+        _day_trade_count: Number of day trades in the rolling 5-day window
+        _updated_dt: Timestamp of the last data refresh
+        _is_stale_flag: Flag indicating if data needs refreshing
+    """
 
     def __init__(self, pdt_strategy: Optional[BasePDTStrategy], tracer: trace.Tracer):
-        """Initialize the broker with tracer support.
+        """Initialize the broker with pattern day trading strategy and tracer support.
 
         Args:
-            tracer: tracer manager instance for instrumentation
+            pdt_strategy: Strategy for enforcing Pattern Day Trading rules
+            tracer: OpenTelemetry tracer for instrumentation
         """
         self._session = aiohttp.ClientSession()
         self._pdt_strategy = pdt_strategy
@@ -40,6 +66,25 @@ class BaseBroker(ABC):
         pdt_strategy: Optional[BasePDTStrategy] = None,
         tracer: Optional[trace.Tracer] = NoOpTracer(),
     ) -> T:
+        """
+        Factory method to create and initialize a broker instance.
+        
+        This async factory method handles proper initialization of resources
+        including HTTP sessions, initial account data fetching, and PDT rule
+        strategy setup. It uses the template method pattern to allow concrete
+        implementations to define their specific initialization logic.
+        
+        Args:
+            pdt_strategy: Strategy for Pattern Day Trading rule enforcement
+            tracer: OpenTelemetry tracer for instrumentation
+            
+        Returns:
+            An initialized instance of the concrete broker
+            
+        Raises:
+            Various exceptions depending on implementation, typically related to
+            authentication or connectivity issues
+        """
         self = cls.__new__(cls)
         if not pdt_strategy:
             pdt_strategy = NunStrategy.create(tracer=tracer)

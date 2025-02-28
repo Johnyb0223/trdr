@@ -8,6 +8,20 @@ T = TypeVar("T", bound="BaseBarProvider")
 
 
 class BaseBarProvider(ABC):
+    """
+    Abstract base class for retrieving and managing OHLCV bar data for securities.
+    
+    This class defines the interface that all bar providers must implement, setting
+    a standardized way to retrieve historical and current price data. Bar providers 
+    serve as the data foundation for trading strategies.
+    
+    All implementations should maintain a data cache for efficient data retrieval
+    and support OpenTelemetry instrumentation for monitoring and tracing.
+    
+    Attributes:
+        _data_cache: Internal cache for storing retrieved bar data
+        _tracer: OpenTelemetry tracer for instrumenting operations
+    """
     def __init__(
         self,
         tracer: trace.Tracer,
@@ -17,6 +31,24 @@ class BaseBarProvider(ABC):
 
     @classmethod
     async def create(cls: Type[T], symbols: List[str], tracer: Optional[trace.Tracer] = trace.NoOpTracer()) -> T:
+        """
+        Factory method to create and initialize a bar provider instance.
+        
+        This async factory method pattern ensures proper initialization of resources
+        and error handling during the creation process. It invokes the implementation-specific
+        _initialize method which must be defined by concrete subclasses.
+        
+        Args:
+            symbols: List of ticker symbols to initialize the provider with
+            tracer: OpenTelemetry tracer for instrumenting operations
+            
+        Returns:
+            An initialized instance of the concrete bar provider
+            
+        Raises:
+            Various exceptions depending on the implementation, typically related to
+            data availability or connectivity issues
+        """
         self = cls.__new__(cls)
         BaseBarProvider.__init__(self, tracer)
         with self._tracer.start_as_current_span("BaseBarProvider.create") as span:

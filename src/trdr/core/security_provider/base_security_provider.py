@@ -9,6 +9,22 @@ T = TypeVar("T", bound="BaseSecurityProvider")
 
 
 class BaseSecurityProvider(ABC):
+    """
+    Abstract base class for working with securities and their market data.
+    
+    The SecurityProvider serves as an intermediary layer between raw market data
+    (from the BarProvider) and the Strategy. It transforms raw OHLCV data into
+    Security objects that expose higher-level methods for technical analysis
+    and price information.
+    
+    This abstraction allows strategies to work with rich security objects
+    rather than dealing directly with raw price bars, simplifying strategy
+    implementation and promoting code reuse.
+    
+    Attributes:
+        _bar_provider: The underlying data provider for raw price bars
+        _tracer: OpenTelemetry tracer for instrumentation
+    """
     def __init__(
         self,
         bar_provider: BaseBarProvider,
