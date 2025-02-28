@@ -112,15 +112,6 @@ class Position(BaseModel):
     average_cost: Money
     side: Optional[PositionSide]
 
-    @classmethod
-    def create_dummy_position(cls, symbol: str = "AAPL") -> "Position":
-        return cls(
-            symbol=symbol,
-            quantity=10,
-            average_cost=Money(100, "USD"),
-            side=PositionSide.LONG,
-        )
-
     def to_json(self) -> str:
         return self.model_dump_json(indent=2)
 

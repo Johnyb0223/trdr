@@ -8,3 +8,8 @@ class BrokerInitializationException(BrokerException):
 
 class PDTStrategyException(BrokerException):
     pass
+
+
+class PDTRuleViolationException(PDTStrategyException):
+    """Exception raised when a PDT rule would be violated by an action."""
+    pass

@@ -5,9 +5,8 @@ from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
 
 from trdr.core.bar_provider.yf_bar_provider.yf_bar_provider import YFBarProvider
-from trdr.core.bar_provider.yf_bar_provider.test_symbols import test_symbols
 from trdr.core.security_provider.security_provider import SecurityProvider
-from trdr.core.broker.mock_broker import MockBroker
+from trdr.core.broker.mock_broker.mock_broker import MockBroker
 from trdr.core.strategy.strategy import Strategy
 
 if __name__ == "__main__":

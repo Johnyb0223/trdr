@@ -32,20 +32,20 @@ def test_invalid_timeframe(get_random_security):
         security.compute_moving_average(None)
 
 
-def test_bullish_crossover(get_security_generator):
+def test_bullish_crossover(security_generator):
     crossover = Crossover(type="golden_cross", ma1=Timeframe.d5, ma2=Timeframe.d20)
     criteria = Criteria(count=200, crossovers=[crossover])
-    generator = get_security_generator
+    generator = security_generator
     generator.criteria = criteria
     security = generator.find_suitable_security()
     result = security.has_bullish_moving_average_crossover(Timeframe.d5, Timeframe.d20)
     assert result is True
 
 
-def test_bearish_crossover(get_security_generator):
+def test_bearish_crossover(security_generator):
     crossover = Crossover(type="death_cross", ma1=Timeframe.d5, ma2=Timeframe.d20)
     criteria = Criteria(count=200, crossovers=[crossover])
-    generator = get_security_generator
+    generator = security_generator
     generator.criteria = criteria
     security = generator.find_suitable_security()
     result = security.has_bearish_moving_average_crossover(Timeframe.d5, Timeframe.d20)

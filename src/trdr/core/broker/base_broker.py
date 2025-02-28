@@ -10,6 +10,8 @@ from .models import Position, OrderSide
 from ..shared.models import Money, TradingDateTime
 from .pdt.nun_strategy import NunStrategy
 from .pdt.base_pdt_strategy import BasePDTStrategy
+from .pdt.models import PDTContext
+from .pdt.exceptions import PDTRuleViolationException
 
 T = TypeVar("T", bound="BaseBroker")
 
@@ -80,9 +82,35 @@ class BaseBroker(ABC):
     @abstractmethod
     async def _position_opened_today(self, symbol: str) -> bool:
         """
-        Implement the low-level position opened today logic specific to the subclass (e.g., interaction with the API).
+        Determine if a specific position was opened today.
+        
+        Implement the broker-specific logic to determine if a position
+        for the given symbol was opened today, which is needed for
+        PDT rule calculations.
+        
+        Args:
+            symbol: The ticker symbol to check
+            
+        Returns:
+            bool: True if the position was opened today, False otherwise
         """
         pass
+        
+    async def _get_positions_opened_today_count(self) -> int:
+        """
+        Get the count of positions opened today.
+        
+        This method counts all positions that were opened today by
+        iterating through the current positions and checking each one.
+        
+        Returns:
+            int: Number of positions opened today
+        """
+        count = 0
+        for symbol in self._positions:
+            if await self._position_opened_today(symbol):
+                count += 1
+        return count
 
     async def get_available_cash(self) -> Money:
         with self._tracer.start_as_current_span("BaseBroker.get_cash") as span:
@@ -152,7 +180,7 @@ class BaseBroker(ABC):
         with self._tracer.start_as_current_span("BaseBroker.place_order") as span:
             await self._stale_handler()
 
-            self._validate_pre_order(symbol, side)
+            await self._validate_pre_order(symbol, side, dollar_amount)
             await self._place_order(symbol, side, dollar_amount)
             self._is_stale_flag = True
             span.set_status(trace.StatusCode.OK)
@@ -164,23 +192,54 @@ class BaseBroker(ABC):
         with self._tracer.start_as_current_span("BaseBroker.cancel_all_orders") as span:
             await self._cancel_all_orders()
             self._is_stale_flag = True
-            await self._stale_handler()
             span.set_status(trace.StatusCode.OK)
 
-    def _validate_pre_order(self, symbol: str, side: OrderSide) -> None:
+    async def _validate_pre_order(self, symbol: str, side: OrderSide, dollar_amount: Money) -> None:
+        """
+        Validate a proposed order against PDT rules and other constraints.
+        
+        This method creates a PDTContext with all relevant information and
+        passes it to the PDT strategy for evaluation.
+        
+        Args:
+            symbol: The ticker symbol for the order
+            side: Buy or sell
+            dollar_amount: The dollar amount of the order
+            
+        Raises:
+            PDTRuleViolationException: If the order would violate PDT rules
+            Exception: For other validation failures
+        """
+        # Create PDT context with all relevant information
+        context = PDTContext(
+            symbol=symbol,
+            side=side,
+            amount=dollar_amount,
+            rolling_day_trade_count=self._day_trade_count,
+            equity=self._equity
+        )
+        
+        # Add additional information based on order side
         if side == OrderSide.BUY:
-            allowed = self._pdt_strategy.check_pdt_open_safely(0, self._day_trade_count)
-            if not allowed:
-                raise Exception("PDT restrictions prevent opening a new position.")
+            # For buy orders, we need the count of positions opened today
+            context.positions_opened_today = await self._get_positions_opened_today_count()
         elif side == OrderSide.SELL:
-            # In a full implementation the broker would determine if the existing position was opened today.
+            # For sell orders, we need to know if this specific position was opened today
             position = self._positions.get(symbol)
-            # Here we use a simplification: if the position exists, assume it was opened today.
-            position_opened_today = bool(position)
-            allowed = self._pdt_strategy.check_pdt_close_safely(position_opened_today, self._day_trade_count)
-            if not allowed:
-                raise Exception("PDT restrictions prevent closing this position.")
-        # Additional common verifications can be incorporated here.
+            if not position:
+                raise Exception(f"Cannot sell {symbol}: no position exists")
+                
+            context.position_opened_today = await self._position_opened_today(symbol)
+        
+        # Let the strategy evaluate the context
+        decision = self._pdt_strategy.evaluate_order(context)
+        
+        # Process the decision
+        if not decision.allowed:
+            reason = decision.reason or "PDT restrictions prevent this order"
+            raise PDTRuleViolationException(reason)
+            
+        # Additional common verifications can be incorporated here
 
     def _clear_current_state(self) -> None:
         with self._tracer.start_as_current_span("BaseBroker._clear_current_state") as span:

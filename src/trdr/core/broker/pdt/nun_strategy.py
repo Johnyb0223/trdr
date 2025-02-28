@@ -1,7 +1,6 @@
-from typing import Union
-
 from .base_pdt_strategy import BasePDTStrategy
-from .exceptions import PDTStrategyException
+from .models import PDTContext, PDTDecision
+from ..models import OrderSide
 
 
 class NunStrategy(BasePDTStrategy):
@@ -22,24 +21,38 @@ class NunStrategy(BasePDTStrategy):
         """Disabled constructor - use NunStrategy.create() instead."""
         raise TypeError("Use NunStrategy.create() instead to create a new NunStrategy")
 
-    def check_pdt_open_safely(self, number_of_positions_opened_today: int, rolling_day_trade_count: int) -> bool:
+    def evaluate_order(self, context: PDTContext) -> PDTDecision:
         """
-        if we do not have an day trade available, we will not open a position
-        """
-        available_day_trades = 3 - rolling_day_trade_count
-        return number_of_positions_opened_today < available_day_trades
+        Evaluate a proposed order against PDT rules, ensuring we always have
+        enough day trades available to close positions if needed.
 
-    def check_pdt_close_safely(self, position_opened_today: bool, rolling_day_trade_count: int) -> bool:
-        """
-        this function should always return true as we should not have been able to open a position in the first place if we did not have a day trade availabe.
+        Args:
+            context: PDT context with all relevant information
 
-        raises:
-        - PDTStrategyException: if we are not able to close a position. This should never happen as we should not have been able to open a position in the first place if we did not have a day trade availabe.
+        Returns:
+            PDTDecision with the evaluation result
         """
-        if not position_opened_today:
-            return True
-        if not rolling_day_trade_count < 3:
-            raise PDTStrategyException(
-                "We should never hit this condition as this strategy should always result in being able to close a position"
-            )
-        return True
+        if context.side == OrderSide.BUY:
+            available_day_trades = 3 - context.rolling_day_trade_count
+            if context.positions_opened_today < available_day_trades:
+                return PDTDecision(allowed=True, reason="Order allowed: sufficient day trades available")
+            else:
+                return PDTDecision(
+                    allowed=False,
+                    reason="PDT restrictions prevent opening a new position: insufficient day trades available",
+                )
+        elif context.side == OrderSide.SELL:
+            if not context.position_opened_today:
+                # Not a day trade if position wasn't opened today
+                return PDTDecision(allowed=True, reason="Order allowed: not a day trade")
+
+            # If position was opened today, we need available day trades
+            if context.rolling_day_trade_count < 3:
+                return PDTDecision(allowed=True, reason="Order allowed: day trade available for position opened today")
+            else:
+                return PDTDecision(
+                    allowed=False, reason="PDT restrictions prevent closing this position: no day trades available"
+                )
+
+        # Fallback for any other order types
+        return PDTDecision(allowed=False, reason="Unknown order type")
