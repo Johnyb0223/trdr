@@ -1,9 +1,31 @@
-from typing import List, Any, Optional
+from typing import List, Any, Optional, Union
 from decimal import Decimal
+from enum import Enum
 
 from ..core.trading_context.trading_context import TradingContext
 from ..core.shared.models import ContextIdentifier
 from ..core.broker.models import Money
+from .lexer import ReservedKeyword
+
+
+class BinaryOperator(Enum):
+    """Enum representing the binary operators supported in the DSL"""
+
+    GREATER = ">"
+    LESS = "<"
+    EQUAL = "=="
+    PLUS = "+"
+    MINUS = "-"
+    MULTIPLY = "*"
+    DIVIDE = "/"
+
+    @classmethod
+    def from_string(cls, operator: str) -> "BinaryOperator":
+        """Convert string operator to enum member"""
+        for op in cls:
+            if op.value == operator:
+                return op
+        raise ValueError(f"Invalid binary operator: {operator}")
 
 
 # A helper function for tree printing.
@@ -47,7 +69,7 @@ class Literal(Expression):
     def __init__(self, value: Any):
         self.value = value
 
-    def evaluate(self, context: Optional[TradingContext]) -> Decimal:
+    async def evaluate(self, context: Optional[TradingContext]) -> Decimal:
         return Decimal(self.value)
 
     def to_pretty_string(self, indent: int = 0) -> str:
@@ -55,24 +77,37 @@ class Literal(Expression):
 
 
 class Identifier(Expression):
-    def __init__(self, name: str):
-        self.name = name
+    def __init__(self, identifier: Union[str, ContextIdentifier]):
+        # If passed a string, convert to ContextIdentifier when possible
+        if isinstance(identifier, str):
+            try:
+                self.context_identifier = ContextIdentifier(identifier)
+            except ValueError:
+                # If it's not a valid ContextIdentifier, keep as string
+                # This allows for custom identifiers that might be added later
+                self.context_identifier = identifier
+        else:
+            self.context_identifier = identifier
 
     async def evaluate(self, context: Optional[TradingContext]) -> Decimal:
         # Retrieve the identifier's value from the context
         if not context:
             raise ValueError("Context is required for identifier evaluation")
-        value = await context.get_value_for_identifier(self.name)
+        value = await context.get_value_for_identifier(self.context_identifier)
         return value
 
     def to_pretty_string(self, indent: int = 0) -> str:
-        return tree_line("Identifier", self.name, indent)
+        return tree_line("Identifier", str(self.context_identifier), indent)
 
 
 class BinaryExpression(Expression):
-    def __init__(self, left: Expression, operator: str, right: Expression):
+    def __init__(self, left: Expression, operator: Union[str, BinaryOperator], right: Expression):
         self.left = left
-        self.operator = operator
+        # Convert string operator to enum if needed
+        if isinstance(operator, str):
+            self.operator = BinaryOperator.from_string(operator)
+        else:
+            self.operator = operator
         self.right = right
 
     async def evaluate(self, context: Optional[TradingContext]) -> bool:
@@ -81,19 +116,20 @@ class BinaryExpression(Expression):
 
         left_val = await self.left.evaluate(context)
         right_val = await self.right.evaluate(context)
-        if self.operator == ">":
+
+        if self.operator == BinaryOperator.GREATER:
             return left_val > right_val
-        elif self.operator == "<":
+        elif self.operator == BinaryOperator.LESS:
             return left_val < right_val
-        elif self.operator == "==":
+        elif self.operator == BinaryOperator.EQUAL:
             return left_val == right_val
-        elif self.operator == "+":
+        elif self.operator == BinaryOperator.PLUS:
             return left_val + right_val
-        elif self.operator == "-":
+        elif self.operator == BinaryOperator.MINUS:
             return left_val - right_val
-        elif self.operator == "*":
+        elif self.operator == BinaryOperator.MULTIPLY:
             return left_val * right_val
-        elif self.operator == "/":
+        elif self.operator == BinaryOperator.DIVIDE:
             return left_val / right_val
         else:
             raise ValueError(f"Unsupported operator {self.operator}")
@@ -101,7 +137,7 @@ class BinaryExpression(Expression):
     def to_pretty_string(self, indent: int = 0) -> str:
         base = "    " * indent
         lines = [f"{base}BinaryExpression"]
-        lines.append(f"{base}    ├─ operator: {self.operator}")
+        lines.append(f"{base}    ├─ operator: {self.operator.value}")
 
         # Left operand
         left_str = self.left.to_pretty_string(indent + 2)
@@ -127,26 +163,45 @@ class BinaryExpression(Expression):
 
 
 class CrossoverExpression(Expression):
-    def __init__(self, left: Identifier, operator: str, right: Identifier):
+    def __init__(self, left: Identifier, operator: Union[str, ReservedKeyword], right: Identifier):
         self.left = left
-        self.operator = operator  # "CROSSED_ABOVE" or "CROSSED_BELOW"
+        # Convert string to ReservedKeyword if needed
+        if isinstance(operator, str):
+            try:
+                self.operator = ReservedKeyword(operator)
+            except ValueError:
+                raise ValueError(f"Invalid crossover operator: {operator}")
+        else:
+            self.operator = operator
         self.right = right
 
     async def evaluate(self, context: Optional[TradingContext]) -> bool:
         if not context:
             raise ValueError("Context is required for crossover expression evaluation")
 
-        if not ContextIdentifier.is_moving_average(self.left.name) or not ContextIdentifier.is_moving_average(
-            self.right.name
+        # Validate both identifiers are moving averages
+        left_identifier = self.left.context_identifier
+        right_identifier = self.right.context_identifier
+
+        if not ContextIdentifier.is_moving_average(left_identifier) or not ContextIdentifier.is_moving_average(
+            right_identifier
         ):
             raise ValueError(
-                f"Unsupported moving average crossover {self.left.name} {self.right.name}. You may have forgotten to add the moving average to the ContextIdentifier enum."
+                f"Unsupported moving average crossover {left_identifier} {right_identifier}. You may have forgotten to add the moving average to the ContextIdentifier enum."
             )
 
-        if self.operator == "CROSSED_ABOVE":
-            return context.current_security.has_bullish_moving_average_crossover(self.left.name, self.right.name)
-        elif self.operator == "CROSSED_BELOW":
-            return context.current_security.has_bearish_moving_average_crossover(self.left.name, self.right.name)
+        # Convert ContextIdentifiers to Timeframes
+        left_timeframe = left_identifier.to_timeframe()
+        right_timeframe = right_identifier.to_timeframe()
+
+        if not left_timeframe or not right_timeframe:
+            raise ValueError(f"Could not convert {left_identifier} or {right_identifier} to timeframes")
+
+        # Call appropriate method based on operator
+        if self.operator == ReservedKeyword.CROSSED_ABOVE:
+            return context.current_security.has_bullish_moving_average_crossover(left_timeframe, right_timeframe)
+        elif self.operator == ReservedKeyword.CROSSED_BELOW:
+            return context.current_security.has_bearish_moving_average_crossover(left_timeframe, right_timeframe)
         else:
             raise ValueError(f"Unsupported crossover operator {self.operator}")
 
@@ -205,10 +260,11 @@ class AnyOf(Expression):
     def __init__(self, conditions: List[Expression]):
         self.conditions = conditions
 
-    def evaluate(self, context: Optional[TradingContext]) -> bool:
+    async def evaluate(self, context: Optional[TradingContext]) -> bool:
         if not context:
             raise ValueError("Context is required for any of evaluation")
-        return any(condition.evaluate(context) for condition in self.conditions)
+        results = [await condition.evaluate(context) for condition in self.conditions]
+        return any(results)
 
     def to_pretty_string(self, indent: int = 0) -> str:
         base = "    " * indent
@@ -257,12 +313,13 @@ class Sizing(Expression):
     def __init__(self, rules: List[SizingRule]):
         self.rules = rules
 
-    def evaluate(self, context: Optional[TradingContext]) -> Decimal:
+    async def evaluate(self, context: Optional[TradingContext]) -> Decimal:
         if not context:
             raise ValueError("Context is required for sizing evaluation")
         for rule in self.rules:
-            if rule.condition is None or rule.condition.evaluate(context):
-                return rule.value.evaluate(context)
+            result = await rule.condition.evaluate(context)
+            if rule.condition is None or result:
+                return await rule.value.evaluate(context)
         raise ValueError("No sizing rule matched the context.")
 
     def to_pretty_string(self, indent: int = 0) -> str:
@@ -300,7 +357,7 @@ class StrategyAST:
     async def evaluate_sizing(self, context: TradingContext) -> Money:
         return await self.sizing.evaluate(context)
 
-    def to_pretty_string(self, indent: int = 0) -> str:
+    async def to_pretty_string(self, indent: int = 0) -> str:
         base = "    " * indent
         lines = [
             f"{base}StrategyAST: {self.name}",

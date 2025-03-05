@@ -2,6 +2,7 @@ from decimal import Decimal
 from dataclasses import dataclass
 from datetime import date, datetime, time, timezone, timedelta
 from enum import Enum
+from typing import Optional
 from pydantic import BaseModel
 
 from .exceptions import TradingDateException
@@ -190,40 +191,75 @@ class Timeframe(Enum):
 
 class ContextIdentifier(str, Enum):
     """
-    Identifiers for the different types of context data. These are imoirtant as they are also used to identify keywords
+    Identifiers for the different types of context data. These are important as they are also used to identify keywords
     in the strategy DSL.
     """
 
     # security technical indicators
-    MA5 = "ma5"
-    MA20 = "ma20"
-    MA50 = "ma50"
-    MA100 = "ma100"
-    MA200 = "ma200"
-    AV5 = "av5"
-    AV20 = "av20"
-    AV50 = "av50"
-    AV100 = "av100"
-    AV200 = "av200"
+    MA5 = "MA5"
+    MA20 = "MA20"
+    MA50 = "MA50"
+    MA100 = "MA100"
+    MA200 = "MA200"
+    AV5 = "AV5"
+    AV20 = "AV20"
+    AV50 = "AV50"
+    AV100 = "AV100"
+    AV200 = "AV200"
 
     # security specific fields
-    CURRENT_VOLUME = "current_volume"
-    CURRENT_PRICE = "current_price"
+    CURRENT_VOLUME = "CURRENT_VOLUME"
+    CURRENT_PRICE = "CURRENT_PRICE"
 
     # account data
-    ACCOUNT_EXPOSURE = "account_exposure"
-    NUMBER_OF_OPEN_POSITIONS = "number_of_open_positions"
-    AVAILABLE_CASH = "available_cash"
-    AVERAGE_COST = "average_cost"
+    ACCOUNT_EXPOSURE = "ACCOUNT_EXPOSURE"
+    NUMBER_OF_OPEN_POSITIONS = "NUMBER_OF_OPEN_POSITIONS"
+    AVAILABLE_CASH = "AVAILABLE_CASH"
+    AVERAGE_COST = "AVERAGE_COST"
 
-    @staticmethod
-    def is_moving_average(identifier: str) -> bool:
-        return identifier in [
-            ContextIdentifier.MA5.value,
-            ContextIdentifier.MA20.value,
-            ContextIdentifier.MA50.value,
-            ContextIdentifier.MA100.value,
-            ContextIdentifier.MA200.value,
-            ContextIdentifier.AV5.value,
-            ContextIdentifier.AV20.value,
+    def is_moving_average(self) -> bool:
+        """Check if this identifier represents a moving average indicator"""
+        return self in [
+            ContextIdentifier.MA5,
+            ContextIdentifier.MA20,
+            ContextIdentifier.MA50,
+            ContextIdentifier.MA100,
+            ContextIdentifier.MA200,
+            ContextIdentifier.AV5,
+            ContextIdentifier.AV20,
+            ContextIdentifier.AV50,
+            ContextIdentifier.AV100,
+            ContextIdentifier.AV200,
         ]
+
+    def to_timeframe(self) -> Optional[Timeframe]:
+        """
+        Convert a moving average context identifier to its corresponding timeframe.
+
+        Returns:
+            Timeframe or None if not a moving average identifier
+
+        Raises:
+            ValueError: If the moving average doesn't have a corresponding timeframe
+        """
+        if not self.is_moving_average():
+            return None
+
+        # Map moving average identifiers to timeframes
+        timeframe_map = {
+            ContextIdentifier.MA5: Timeframe.d5,
+            ContextIdentifier.MA20: Timeframe.d20,
+            ContextIdentifier.MA50: Timeframe.d50,
+            ContextIdentifier.MA100: Timeframe.d100,
+            ContextIdentifier.MA200: Timeframe.d200,
+            ContextIdentifier.AV5: Timeframe.d5,
+            ContextIdentifier.AV20: Timeframe.d20,
+            ContextIdentifier.AV50: Timeframe.d50,
+            ContextIdentifier.AV100: Timeframe.d100,
+            ContextIdentifier.AV200: Timeframe.d200,
+        }
+
+        timeframe = timeframe_map.get(self)
+        if timeframe is None:
+            raise ValueError(f"No corresponding timeframe for {self}")
+        return timeframe

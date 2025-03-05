@@ -6,6 +6,7 @@ from .dsl_ast import (
     Literal,
     Identifier,
     BinaryExpression,
+    BinaryOperator,
     CrossoverExpression,
     AllOf,
     AnyOf,
@@ -154,32 +155,37 @@ class Parser:
     def parse_comparison(self) -> Expression:
         left = self.parse_arithmetic()
         token = self.current()
-        # Treat the token as an operator if its type is OPERATOR,
-        # or if it's an IDENTIFIER with a value that is one of the crossover operators.
-        if token.type in {TokenType.OPERATOR, TokenType.IDENTIFIER} and token.value.upper() in {
-            ">",
-            "<",
-            "==",
+
+        # Handle standard binary operators
+        if token.type == TokenType.OPERATOR and token.value in {">", "<", "==", "+", "-", "*", "/"}:
+            try:
+                op = BinaryOperator.from_string(token.value)
+                self.advance()
+                right = self.parse_arithmetic()
+                return BinaryExpression(left, op, right)
+            except ValueError:
+                pass  # If not a valid BinaryOperator, just return left
+
+        # Handle crossover operators (which are identifiers, not operators)
+        elif token.type == TokenType.IDENTIFIER and token.value.upper() in {
             ReservedKeyword.CROSSED_ABOVE,
             ReservedKeyword.CROSSED_BELOW,
         }:
-            op = token.value.upper()
+            op = ReservedKeyword(token.value.upper())
             self.advance()
             right = self.parse_arithmetic()
 
-            # Use CrossoverExpression for CROSSED_ABOVE and CROSSED_BELOW
-            if op in {ReservedKeyword.CROSSED_ABOVE, ReservedKeyword.CROSSED_BELOW}:
-                if not isinstance(left, Identifier) or not isinstance(right, Identifier):
-                    raise ParserError(f"Crossover operators require identifiers on both sides", token.line)
-                return CrossoverExpression(left, op, right)
-            else:
-                return BinaryExpression(left, op, right)
+            if not isinstance(left, Identifier) or not isinstance(right, Identifier):
+                raise ParserError(f"Crossover operators require identifiers on both sides", token.line)
+            return CrossoverExpression(left, op, right)
+
         return left
 
     def parse_arithmetic(self) -> Expression:
         expr = self.parse_term()
         while self.current().type == TokenType.OPERATOR and self.current().value in {"+", "-"}:
-            op = self.current().value
+            op_str = self.current().value
+            op = BinaryOperator.from_string(op_str)
             self.advance()
             right = self.parse_term()
             expr = BinaryExpression(expr, op, right)
@@ -188,7 +194,8 @@ class Parser:
     def parse_term(self) -> Expression:
         expr = self.parse_factor()
         while self.current().type == TokenType.OPERATOR and self.current().value in {"*", "/"}:
-            op = self.current().value
+            op_str = self.current().value
+            op = BinaryOperator.from_string(op_str)
             self.advance()
             right = self.parse_factor()
             expr = BinaryExpression(expr, op, right)
