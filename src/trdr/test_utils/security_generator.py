@@ -3,7 +3,7 @@ from decimal import Decimal
 import random
 import datetime
 import matplotlib.pyplot as plt
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from typing import Literal
 from ..core.bar_provider.models import Bar
 from ..core.shared.models import Money, TradingDateTime, Timeframe
@@ -24,10 +24,12 @@ class Crossover(BaseModel):
 
 class Criteria(BaseModel):
     count: int
-    start_price: Money | None = Money(random.randint(10, 500))
+    start_price: Money | None = Money(amount=Decimal(random.randint(10, 500)))
     start_volume: int | None = random.randint(1000, 100000)
     moving_averages: List[MovingAverage] | None = None
     crossovers: List[Crossover] | None = None
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
 
 class SecurityGenerator:
@@ -67,15 +69,15 @@ class SecurityGenerator:
 
             bar = Bar(
                 trading_datetime=current_datetime,
-                open=Money(open_p),
-                high=Money(high_p),
-                low=Money(low_p),
-                close=Money(close_p),
+                open=Money(amount=Decimal(open_p)),
+                high=Money(amount=Decimal(high_p)),
+                low=Money(amount=Decimal(low_p)),
+                close=Money(amount=Decimal(close_p)),
                 volume=volume,
             )
 
             bars.append(bar)
-            current_price = Money(close_p)
+            current_price = Money(amount=Decimal(close_p))
 
             if random.random() < trend_shift_probability:
                 trend = Decimal(random.uniform(*trend_range))
@@ -141,29 +143,6 @@ class SecurityGenerator:
             return ma1_prev > ma2_prev and ma1_curr < ma2_curr
         return False
 
-    def plot_moving_averages(self, security, timeframes):
-        reversed_bars = list(reversed(security.bars))
-        dates = [bar.trading_datetime.trading_date for bar in reversed_bars]
-
-        for timeframe in timeframes:
-            ma_values = []
-            days = timeframe.to_days()
-
-            for i in range(len(reversed_bars) - days + 1):
-                ma = security.compute_moving_average(timeframe, offset=i)
-                if ma is not None:
-                    ma_values.append(ma.amount)
-
-            valid_dates = dates[: len(ma_values)]
-
-            plt.plot(valid_dates, ma_values, label=f"MA {timeframe.to_days()}")
-
-        plt.xlabel("Date")
-        plt.ylabel("Price")
-        plt.title("Moving Averages")
-        plt.legend()
-        plt.show()
-
 
 if __name__ == "__main__":
     criteria = Criteria(
@@ -179,6 +158,3 @@ if __name__ == "__main__":
     ma20_prev = security.compute_moving_average(Timeframe.d20, 1)
     print(f"Current - ma5: {ma5}, ma20: {ma20}")
     print(f"Previous - ma5: {ma5_prev}, ma20: {ma20_prev}")
-
-    # Plot the moving averages
-    generator.plot_moving_averages(security, [Timeframe.d5, Timeframe.d20])

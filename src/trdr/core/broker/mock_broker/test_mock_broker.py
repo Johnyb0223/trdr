@@ -24,8 +24,8 @@ def test_refresh_sets_default_values(mock_broker, dummy_position):
     asyncio.run(mock_broker._refresh())
 
     # Verify default values were set
-    assert mock_broker._cash == Money(10000, "USD")
-    assert mock_broker._equity == Money(15000, "USD")
+    assert mock_broker._cash == Money(amount=Decimal(10000))
+    assert mock_broker._equity == Money(amount=Decimal(15000))
     assert mock_broker._day_trade_count == 0
     assert len(mock_broker._positions) == 3
     assert "AAPL" in mock_broker._positions
@@ -73,12 +73,12 @@ def test_get_position_returns_none_for_nonexistent_symbol(mock_broker):
 
 def test_get_available_cash_returns_mock_cash(mock_broker):
     cash = asyncio.run(mock_broker.get_available_cash())
-    assert cash == Money(10000, "USD")
+    assert cash == Money(amount=Decimal(10000))
 
 
 def test_get_equity_returns_mock_equity(mock_broker):
     equity = asyncio.run(mock_broker.get_equity())
-    assert equity == Money(15000, "USD")
+    assert equity == Money(amount=Decimal(15000))
 
 
 def test_get_account_exposure_calculates_correctly(mock_broker):
@@ -101,7 +101,7 @@ def test_get_position_exposure_returns_zero_for_nonexistent_symbol(mock_broker):
 
 def test_place_order_completes_without_error(mock_broker):
     # Just verify no exceptions are raised
-    asyncio.run(mock_broker.place_order("MSFT", OrderSide.BUY, Money(500, "USD")))
+    asyncio.run(mock_broker.place_order("MSFT", OrderSide.BUY, Money(amount=Decimal(500))))
     # Verify state is marked as stale
     assert mock_broker._is_stale_flag is True
 
@@ -124,7 +124,7 @@ def test_broker_as_context_manager():
         # Don't need to explicitly create NunStrategy since it's the default
         async with await MockBroker.create() as broker:
             cash = await broker.get_available_cash()
-            assert cash == Money(10000, "USD")
+            assert cash == Money(amount=Decimal(10000))
         # After exiting context, session should be closed
         assert broker._session is None
 
@@ -147,5 +147,5 @@ def test_stale_handler_refreshes_when_stale(mock_broker):
     asyncio.run(mock_broker._stale_handler())
 
     # Verify state was refreshed
-    assert mock_broker._cash == Money(10000, "USD")
+    assert mock_broker._cash == Money(amount=Decimal(10000))
     assert mock_broker._is_stale_flag is False

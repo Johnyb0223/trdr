@@ -1,6 +1,7 @@
 # TRDR - Trading Framework
 
 ## Build & Test Commands
+
 ```bash
 # Install dev dependencies
 pip install -e ".[dev]"
@@ -8,7 +9,7 @@ pip install -e ".[dev]"
 # Run all tests
 pytest
 
-# Run specific test file 
+# Run specific test file
 pytest src/trdr/path/to/test_file.py
 
 # Run specific test
@@ -16,6 +17,7 @@ pytest src/trdr/path/to/test_file.py::TestClass::test_method
 ```
 
 ## Code Style Guidelines
+
 - **Naming**: Classes=PascalCase, functions/methods=snake_case, constants=UPPER_SNAKE_CASE
 - **Imports**: Standard lib → third-party → local, specific imports preferred
 - **Types**: Always use type annotations for parameters and return values
@@ -25,6 +27,8 @@ pytest src/trdr/path/to/test_file.py::TestClass::test_method
 - **DSL**: Trading strategies defined in `.trdr` files with STRATEGY, ENTRY, EXIT sections
 
 ## Project Structure
+
 - `src/trdr/core/`: Core trading components (broker, bar_provider, strategy)
 - `src/trdr/dsl/`: Domain-specific language for strategy definition
-- `src/trdr/utils/`: Utility functions and helpers
+- `src/trdr/conftest.py`: pytest fixtures
+- `src/trdr/test_utils/`: Test utilities

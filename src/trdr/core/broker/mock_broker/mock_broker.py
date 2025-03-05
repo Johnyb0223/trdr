@@ -25,43 +25,43 @@ class MockBroker(BaseBroker):
 
     async def _refresh(self) -> None:
         with self._tracer.start_as_current_span("mock_broker._refresh") as span:
-            self._cash = Money(10000, "USD")
-            
+            self._cash = Money(amount=Decimal(10000))
+
             # Create default positions
             position_aapl = Position(
                 symbol="AAPL",
                 quantity=Decimal(10),
-                average_cost=Money(100, "USD"),
+                average_cost=Money(amount=Decimal(100)),
                 side=PositionSide.LONG,
             )
-            
+
             position_msft = Position(
                 symbol="MSFT",
                 quantity=Decimal(5),
-                average_cost=Money(200, "USD"),
+                average_cost=Money(amount=Decimal(200)),
                 side=PositionSide.LONG,
             )
-            
+
             position_goog = Position(
                 symbol="GOOG",
                 quantity=Decimal(2),
-                average_cost=Money(500, "USD"),
+                average_cost=Money(amount=Decimal(500)),
                 side=PositionSide.LONG,
             )
-            
+
             # Store positions
             self._positions = {
                 position_aapl.symbol: position_aapl,
                 position_msft.symbol: position_msft,
                 position_goog.symbol: position_goog,
             }
-            
+
             # Mark one position as opened today for testing
             if not hasattr(self, "_positions_opened_today"):
                 self._positions_opened_today = {}
             self._positions_opened_today["MSFT"] = True
-            
-            self._equity = Money(15000, "USD")
+
+            self._equity = Money(amount=Decimal(15000))
             self._day_trade_count = 0
             span.set_status(trace.StatusCode.OK)
 
@@ -91,13 +91,13 @@ class MockBroker(BaseBroker):
     async def _position_opened_today(self, symbol: str) -> bool:
         """
         Determine if a position was opened today.
-        
+
         For the mock broker, this is configurable to simulate different scenarios.
         By default, positions are considered NOT opened today.
-        
+
         Args:
             symbol: The ticker symbol to check
-            
+
         Returns:
             bool: True if the position was opened today, False otherwise
         """
@@ -106,14 +106,14 @@ class MockBroker(BaseBroker):
             # Default implementation assumes no positions were opened today
             span.set_status(trace.StatusCode.OK)
             return getattr(self, "_positions_opened_today", {}).get(symbol, False)
-            
+
     async def set_position_opened_today(self, symbol: str, opened_today: bool = True) -> None:
         """
         Mark a position as opened today for testing purposes.
-        
+
         This method allows test code to simulate positions being opened today
         to test PDT rule enforcement.
-        
+
         Args:
             symbol: The ticker symbol to mark
             opened_today: Whether to mark the position as opened today (True) or not (False)
@@ -121,10 +121,10 @@ class MockBroker(BaseBroker):
         with self._tracer.start_as_current_span("mock_broker.set_position_opened_today") as span:
             if not hasattr(self, "_positions_opened_today"):
                 self._positions_opened_today = {}
-                
+
             if opened_today:
                 self._positions_opened_today[symbol] = True
             elif symbol in self._positions_opened_today:
                 del self._positions_opened_today[symbol]
-                
+
             span.set_status(trace.StatusCode.OK)

@@ -1,5 +1,6 @@
 from typing import List, Optional
 from pydantic import BaseModel, model_validator, ConfigDict
+from decimal import Decimal
 
 from ..bar_provider.models import Bar
 from ..bar_provider.exceptions import InsufficientBarsException
@@ -95,7 +96,7 @@ class Security(BaseModel):
 
         # Sum the closing prices for the specified window
         sum_prices = sum(bar.close.amount for bar in relevant_bars[start_idx:end_idx])
-        return Money(sum_prices / days)
+        return Money(amount=Decimal(sum_prices / days))
 
     def has_bullish_moving_average_crossover(
         self, short_period: Optional[Timeframe], long_period: Optional[Timeframe]

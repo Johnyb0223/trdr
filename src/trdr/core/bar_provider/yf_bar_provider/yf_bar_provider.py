@@ -1,6 +1,7 @@
 from typing import List, Tuple, Optional
 from datetime import timedelta, timezone
 import yfinance as yf
+from decimal import Decimal
 import pandas as pd
 from opentelemetry import trace
 import logging
@@ -172,10 +173,10 @@ class YFBarProvider(BaseBarProvider):
                     utc_timestamp = pd.Timestamp(date).to_pydatetime().replace(tzinfo=timezone.utc)
                     bar = Bar(
                         trading_datetime=TradingDateTime.from_utc(utc_timestamp),
-                        open=Money(row["Open"]),
-                        high=Money(row["High"]),
-                        low=Money(row["Low"]),
-                        close=Money(row["Close"]),
+                        open=Money(amount=Decimal(float(row["Open"]))),
+                        high=Money(amount=Decimal(float(row["High"]))),
+                        low=Money(amount=Decimal(float(row["Low"]))),
+                        close=Money(amount=Decimal(float(row["Close"]))),
                         volume=int(row["Volume"]),
                     )
                     bars.append(bar)

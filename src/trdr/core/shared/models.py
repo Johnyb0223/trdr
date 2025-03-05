@@ -1,13 +1,13 @@
 from decimal import Decimal
 from dataclasses import dataclass
-from typing import Union
+from typing import Union, Optional
 from datetime import date, datetime, time, timezone, timedelta
 from enum import Enum
 from trdr.core.shared.exceptions import TradingDateException
+from pydantic import BaseModel
 
 
-@dataclass(frozen=True)
-class Money:
+class Money(BaseModel):
     """Value object representing monetary amounts in trading context.
 
     Attributes:
@@ -19,20 +19,7 @@ class Money:
     """
 
     amount: Decimal
-    currency: str = "USD"  # Default to USD since most trading is in dollars
-
-    def __init__(self, amount: Union[str, Decimal], currency: str = "USD"):
-        """Initialize a Money object.
-
-        Args:
-            amount: The monetary amount as string, Decimal or Decimal
-            currency: The currency code, defaults to USD
-        """
-        if amount is None:
-            raise ValueError("Amount cannot be None")
-
-        object.__setattr__(self, "amount", Decimal(str(amount)))
-        object.__setattr__(self, "currency", currency)
+    currency: str | None = "USD"
 
     def __add__(self, other: "Money") -> "Money":
         """Add two Money objects.
@@ -52,6 +39,11 @@ class Money:
 
     def __str__(self) -> str:
         return f"{self.currency} {self.amount:.2f}"
+
+    def __eq__(self, other):
+        if not isinstance(other, Money):
+            return False
+        return self.amount == other.amount and self.currency == other.currency
 
 
 @dataclass(frozen=True)

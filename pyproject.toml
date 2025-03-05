@@ -21,7 +21,6 @@ dependencies = [
 dev = [
     "pytest==8.3.4",
     "pytest-asyncio==0.25.2",
-    "matplotlib==3.8.2",
 ]
 
 [tool.pytest.ini_options]
