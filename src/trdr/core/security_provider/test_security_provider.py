@@ -3,7 +3,7 @@ import asyncio
 
 
 def test_get_security_list_returns_list_of_security_objects(security_provider_with_fake_data):
-    security_list = asyncio.run(security_provider_with_fake_data.get_security_list())
+    security_list = asyncio.run(security_provider_with_fake_data.get_symbols())
     assert len(security_list) == len(security_provider_with_fake_data._bar_provider._data_cache.keys())
 
 

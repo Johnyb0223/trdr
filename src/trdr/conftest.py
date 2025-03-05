@@ -5,14 +5,14 @@ from decimal import Decimal
 
 from .core.security_provider.security_provider import SecurityProvider
 from .core.bar_provider.yf_bar_provider.yf_bar_provider import YFBarProvider
-from .core.shared.models import Timeframe, Money, TradingDateTime
-from .utils.fake_yf_download import fake_yf_download
-from .utils.security_generator import SecurityGenerator, Criteria
+from .core.shared.models import Money
+from .test_utils.fake_yf_download import fake_yf_download
+from .test_utils.security_generator import SecurityGenerator, Criteria
 from .core.broker.mock_broker.mock_broker import MockBroker
-from .core.broker.pdt.nun_strategy import NunStrategy
 from .core.broker.pdt.wiggle_strategy import WiggleStrategy
 from .core.broker.pdt.yolo_strategy import YoloStrategy
 from .core.broker.models import Position, PositionSide
+from .core.trading_engine.trading_engine import TradingEngine
 
 
 @pytest.fixture(scope="function")
@@ -65,7 +65,7 @@ def dummy_position(symbol="AAPL"):
     return Position(
         symbol=symbol,
         quantity=Decimal(10),
-        average_cost=Money(100, "USD"),
+        average_cost=Money(amount=Decimal(100)),
         side=PositionSide.LONG,
     )
 
@@ -78,7 +78,7 @@ def dummy_positions(dummy_position):
         "MSFT": Position(
             symbol="MSFT",
             quantity=Decimal(5),
-            average_cost=Money(200, "USD"),
+            average_cost=Money(amount=Decimal(200)),
             side=PositionSide.LONG,
         ),
     }
@@ -107,3 +107,42 @@ def mock_broker_with_yolo_strategy():
     broker = asyncio.run(MockBroker.create(pdt_strategy=pdt_strategy))
     yield broker
     asyncio.run(broker._session.close())
+
+
+@pytest.fixture(scope="function")
+def mock_trading_engine(mock_broker, security_provider_with_fake_data):
+    engine = asyncio.run(
+        TradingEngine.create(
+            "test_strat.trdr",
+            mock_broker,
+            security_provider_with_fake_data,
+            strategies_dir="src/trdr/test_utils/strategies",
+        )
+    )
+    return engine
+
+
+@pytest.fixture(scope="function")
+def mock_trading_engine_always_buy(mock_broker, security_provider_with_fake_data):
+    engine = asyncio.run(
+        TradingEngine.create(
+            "always_buy.trdr",
+            mock_broker,
+            security_provider_with_fake_data,
+            strategies_dir="src/trdr/test_utils/strategies",
+        )
+    )
+    return engine
+
+
+@pytest.fixture(scope="function")
+def mock_trading_engine_always_sell(mock_broker, security_provider_with_fake_data):
+    engine = asyncio.run(
+        TradingEngine.create(
+            "always_sell.trdr",
+            mock_broker,
+            security_provider_with_fake_data,
+            strategies_dir="src/trdr/test_utils/strategies",
+        )
+    )
+    return engine

@@ -2,29 +2,32 @@ from dataclasses import dataclass
 from enum import Enum, auto
 from typing import List
 
-from ..core.strategy.models import ContextIdentifier
+from ..core.shared.models import ContextIdentifier
 
-# These are keywords that are not part of the ContextIdentifier enum as they are
-# not really business logic identifiers. They are keywords that do not translate
-# directly to values within the StrategyContext object.
-LexerContextIdentifiers = list(ContextIdentifier.__members__.keys())
-LexerContextIdentifiers.extend(
-    [
-        "STRATEGY",
-        "NAME",
-        "DESCRIPTION",
-        "ENTRY",
-        "EXIT",
-        "SIZING",
-        "RULE",
-        "CONDITION",
-        "ANY_OF",
-        "ALL_OF",
-        "CROSSED_ABOVE",
-        "CROSSED_BELOW",
-        "DOLLAR_AMOUNT",
-    ]
-)
+
+class ReservedKeyword(str, Enum):
+    """
+    Reserved keywords in the DSL language syntax.
+    These are distinct from ContextIdentifier which represents runtime variables.
+    """
+
+    STRATEGY = "STRATEGY"
+    NAME = "NAME"
+    DESCRIPTION = "DESCRIPTION"
+    ENTRY = "ENTRY"
+    EXIT = "EXIT"
+    SIZING = "SIZING"
+    RULE = "RULE"
+    CONDITION = "CONDITION"
+    ANY_OF = "ANY_OF"
+    ALL_OF = "ALL_OF"
+    CROSSED_ABOVE = "CROSSED_ABOVE"
+    CROSSED_BELOW = "CROSSED_BELOW"
+    DOLLAR_AMOUNT = "DOLLAR_AMOUNT"
+
+
+# Valid identifiers include both context identifiers and reserved keywords
+VALID_IDENTIFIERS = list(ContextIdentifier.__members__.keys()) + [kw.value for kw in ReservedKeyword]
 
 
 class TokenType(Enum):
@@ -184,7 +187,7 @@ class Lexer:
             self._advance()
 
         value = self.text[start_pos : self.pos]
-        if value in LexerContextIdentifiers:
+        if value in VALID_IDENTIFIERS:
             return Token(TokenType.IDENTIFIER, value, self.line)
         else:
             raise LexerError(f"Invalid identifier '{value}' at line {self.line}", self.line)

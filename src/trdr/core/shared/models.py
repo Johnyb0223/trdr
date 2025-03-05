@@ -1,10 +1,10 @@
 from decimal import Decimal
 from dataclasses import dataclass
-from typing import Union, Optional
 from datetime import date, datetime, time, timezone, timedelta
 from enum import Enum
-from trdr.core.shared.exceptions import TradingDateException
 from pydantic import BaseModel
+
+from .exceptions import TradingDateException
 
 
 class Money(BaseModel):
@@ -186,3 +186,44 @@ class Timeframe(Enum):
         if not str_representation:
             raise ValueError(f"Could not convert {self.name} to string")
         return str_representation
+
+
+class ContextIdentifier(str, Enum):
+    """
+    Identifiers for the different types of context data. These are imoirtant as they are also used to identify keywords
+    in the strategy DSL.
+    """
+
+    # security technical indicators
+    MA5 = "ma5"
+    MA20 = "ma20"
+    MA50 = "ma50"
+    MA100 = "ma100"
+    MA200 = "ma200"
+    AV5 = "av5"
+    AV20 = "av20"
+    AV50 = "av50"
+    AV100 = "av100"
+    AV200 = "av200"
+
+    # security specific fields
+    CURRENT_VOLUME = "current_volume"
+    CURRENT_PRICE = "current_price"
+
+    # account data
+    ACCOUNT_EXPOSURE = "account_exposure"
+    NUMBER_OF_OPEN_POSITIONS = "number_of_open_positions"
+    AVAILABLE_CASH = "available_cash"
+    AVERAGE_COST = "average_cost"
+
+    @staticmethod
+    def is_moving_average(identifier: str) -> bool:
+        return identifier in [
+            ContextIdentifier.MA5.value,
+            ContextIdentifier.MA20.value,
+            ContextIdentifier.MA50.value,
+            ContextIdentifier.MA100.value,
+            ContextIdentifier.MA200.value,
+            ContextIdentifier.AV5.value,
+            ContextIdentifier.AV20.value,
+        ]

@@ -26,4 +26,3 @@ STRATEGY
                     NUMBER_OF_OPEN_POSITIONS < 3
             DOLLAR_AMOUNT 
                 (AVAILABLE_CASH * 0.20)
-    

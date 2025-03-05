@@ -1,11 +1,12 @@
 from typing import List
-from .lexer import Token, TokenType, Lexer
+from .lexer import Token, TokenType, ReservedKeyword
 from .dsl_ast import (
     StrategyAST,
     Expression,
     Literal,
     Identifier,
     BinaryExpression,
+    CrossoverExpression,
     AllOf,
     AnyOf,
     Sizing,
@@ -48,7 +49,7 @@ class Parser:
         return self.parse_strategy()
 
     def parse_strategy(self) -> StrategyAST:
-        self.expect(TokenType.IDENTIFIER, "STRATEGY")
+        self.expect(TokenType.IDENTIFIER, ReservedKeyword.STRATEGY)
         self.expect(TokenType.INDENT)
         name = None
         description = None
@@ -59,17 +60,17 @@ class Parser:
         while self.current().type != TokenType.DEDENT and self.current().type != TokenType.EOF:
             field_token = self.expect(TokenType.IDENTIFIER)
             field_name = field_token.value.upper()
-            if field_name in {"NAME", "DESCRIPTION"}:
+            if field_name in {ReservedKeyword.NAME, ReservedKeyword.DESCRIPTION}:
                 value_token = self.expect(TokenType.STRING)
-                if field_name == "NAME":
+                if field_name == ReservedKeyword.NAME:
                     name = value_token.value.strip('"')
                 else:
                     description = value_token.value.strip('"')
-            elif field_name == "ENTRY":
+            elif field_name == ReservedKeyword.ENTRY:
                 entry_expr = self.parse_entry_or_exit()
-            elif field_name == "EXIT":
+            elif field_name == ReservedKeyword.EXIT:
                 exit_expr = self.parse_entry_or_exit()
-            elif field_name == "SIZING":
+            elif field_name == ReservedKeyword.SIZING:
                 sizing_expr = self.parse_sizing()
             else:
                 raise ParserError(f"Unknown field '{field_token.value}'", field_token.line)
@@ -91,9 +92,13 @@ class Parser:
         self.expect(TokenType.INDENT)
         # Enforce that the first token is an identifier and its value is a composite operator.
         token = self.current()
-        if token.type != TokenType.IDENTIFIER or token.value.upper() not in {"ALL_OF", "ANY_OF"}:
+        if token.type != TokenType.IDENTIFIER or token.value.upper() not in {
+            ReservedKeyword.ALL_OF,
+            ReservedKeyword.ANY_OF,
+        }:
             raise ParserError(
-                "Entry/Exit block must start with a composite operator ('ALL_OF' or 'ANY_OF').", token.line
+                f"Entry/Exit block must start with a composite operator ('{ReservedKeyword.ALL_OF}' or '{ReservedKeyword.ANY_OF}').",
+                token.line,
             )
         expr = self.parse_expression()
         if self.current().type != TokenType.DEDENT:
@@ -120,14 +125,17 @@ class Parser:
 
     def parse_expression(self) -> Expression:
         token = self.current()
-        if token.type == TokenType.IDENTIFIER and token.value.upper() in {"ALL_OF", "ANY_OF"}:
+        if token.type == TokenType.IDENTIFIER and token.value.upper() in {
+            ReservedKeyword.ALL_OF,
+            ReservedKeyword.ANY_OF,
+        }:
             comp = token.value.upper()
             self.advance()  # consume 'all_of' or 'any_of'
             # Instead of using parse_block_expression, get a list of expressions directly.
             exprs = self.parse_composite_block()
-            if comp == "ALL_OF":
+            if comp == ReservedKeyword.ALL_OF:
                 return AllOf(exprs)
-            elif comp == "ANY_OF":
+            elif comp == ReservedKeyword.ANY_OF:
                 return AnyOf(exprs)
             else:
                 raise ParserError(f"Unknown composite operator '{comp}'", token.line)
@@ -152,13 +160,20 @@ class Parser:
             ">",
             "<",
             "==",
-            "CROSSED_ABOVE",
-            "CROSSED_BELOW",
+            ReservedKeyword.CROSSED_ABOVE,
+            ReservedKeyword.CROSSED_BELOW,
         }:
             op = token.value.upper()
             self.advance()
             right = self.parse_arithmetic()
-            return BinaryExpression(left, op, right)
+
+            # Use CrossoverExpression for CROSSED_ABOVE and CROSSED_BELOW
+            if op in {ReservedKeyword.CROSSED_ABOVE, ReservedKeyword.CROSSED_BELOW}:
+                if not isinstance(left, Identifier) or not isinstance(right, Identifier):
+                    raise ParserError(f"Crossover operators require identifiers on both sides", token.line)
+                return CrossoverExpression(left, op, right)
+            else:
+                return BinaryExpression(left, op, right)
         return left
 
     def parse_arithmetic(self) -> Expression:
@@ -209,7 +224,7 @@ class Parser:
         self.expect(TokenType.INDENT)
         rules = []
         while self.current().type != TokenType.DEDENT and self.current().type != TokenType.EOF:
-            self.expect(TokenType.IDENTIFIER, "RULE")
+            self.expect(TokenType.IDENTIFIER, ReservedKeyword.RULE)
             rule = self.parse_sizing_rule()
             rules.append(rule)
         self.expect(TokenType.DEDENT)
@@ -224,9 +239,9 @@ class Parser:
             field_token = self.expect(TokenType.IDENTIFIER)
             field_name = field_token.value.upper()
 
-            if field_name == "CONDITION":
+            if field_name == ReservedKeyword.CONDITION:
                 condition = self.parse_condition_block()
-            elif field_name == "DOLLAR_AMOUNT":
+            elif field_name == ReservedKeyword.DOLLAR_AMOUNT:
                 # Handle the case where AMOUNT is followed by an indented value
                 self.expect(TokenType.INDENT)
                 value = self.parse_expression()
@@ -247,14 +262,17 @@ class Parser:
         """
         self.expect(TokenType.INDENT)
         token = self.current()
-        if token.type == TokenType.IDENTIFIER and token.value.upper() in {"ALL_OF", "ANY_OF"}:
+        if token.type == TokenType.IDENTIFIER and token.value.upper() in {
+            ReservedKeyword.ALL_OF,
+            ReservedKeyword.ANY_OF,
+        }:
             comp = token.value.upper()
             self.advance()  # consume 'all_of' or 'any_of'
             exprs = self.parse_composite_block()
             self.expect(TokenType.DEDENT)
-            if comp == "ALL_OF":
+            if comp == ReservedKeyword.ALL_OF:
                 return AllOf(exprs)
-            elif comp == "ANY_OF":
+            elif comp == ReservedKeyword.ANY_OF:
                 return AnyOf(exprs)
         else:
             # If not a composite, parse a single expression

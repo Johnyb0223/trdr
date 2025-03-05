@@ -36,9 +36,8 @@ class SecurityProvider(BaseSecurityProvider):
                 span.set_status(trace.StatusCode.OK)
                 return Security(symbol=symbol, bars=bars, current_bar=current_bar)
 
-    async def get_security_list(self) -> List[Security]:
-        with self._tracer.start_as_current_span("SecurityProvider.get_security_list") as span:
+    async def get_symbols(self) -> List[str]:
+        with self._tracer.start_as_current_span("SecurityProvider.get_symbols") as span:
             symbols = self._bar_provider.get_symbols()
-            list_of_security_objects = [await self.get_security(symbol) for symbol in symbols]
             span.set_status(trace.StatusCode.OK)
-            return list_of_security_objects
+            return symbols

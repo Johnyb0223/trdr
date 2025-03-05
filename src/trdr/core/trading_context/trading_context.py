@@ -1,0 +1,237 @@
+from typing import Type, TypeVar
+from decimal import Decimal
+from opentelemetry import trace
+
+from ..broker.base_broker import BaseBroker
+from ..security_provider.base_security_provider import BaseSecurityProvider
+from ..shared.models import ContextIdentifier
+from ..security_provider.models import Security
+from ..broker.models import Position
+from .exceptions import MissingContextValue
+from ..security_provider.models import Timeframe
+
+T = TypeVar("T", bound="TradingContext")
+
+
+class TradingContext:
+    def __init__(
+        self,
+        security_provider: BaseSecurityProvider,
+        broker: BaseBroker,
+        tracer: trace.Tracer = trace.NoOpTracer(),
+        _from_create: bool = False,
+    ):
+        if not _from_create:
+            raise TypeError("Use TradingContext.create() instead to create a new trading context")
+        self.security_provider = security_provider
+        self.broker = broker
+        self.current_symbol: str | None = None
+        self.current_position: Position | None = None
+        self.current_security: Security | None = None
+        self.symbol_stack: list[str] | None = None
+        self._tracer = tracer
+
+    @classmethod
+    async def create(
+        cls: Type[T],
+        security_provider: BaseSecurityProvider,
+        broker: BaseBroker,
+        tracer: trace.Tracer = trace.NoOpTracer(),
+    ) -> T:
+        self = cls.__new__(cls)
+        TradingContext.__init__(self, security_provider, broker, tracer, _from_create=True)
+        with self._tracer.start_as_current_span("TradingContext.create") as span:
+            try:
+                await self._initialize()
+            except Exception as e:
+                span.record_exception(e)
+                span.set_status(trace.StatusCode.ERROR)
+                raise
+            else:
+                span.set_status(trace.StatusCode.OK)
+                return self
+
+    async def _initialize(self) -> None:
+        self.symbol_stack = await self.security_provider.get_symbols()
+
+    async def next_symbol(self) -> bool:
+        with self._tracer.start_as_current_span("TradingContext.next_symbol") as span:
+            span.set_attribute("length_of_symbol_stack", len(self.symbol_stack))
+            try:
+                self.current_symbol = self.symbol_stack.pop(0)
+            except IndexError:
+                span.set_status(trace.StatusCode.OK)
+                span.add_event("No more symbols to process")
+                self.current_symbol = None
+                self.current_position = None
+                self.current_security = None
+                return False
+            else:
+                self.current_position = await self.broker.get_position(self.current_symbol)
+                self.current_security = await self.security_provider.get_security(self.current_symbol)
+
+                if not self.current_security.symbol == self.current_symbol:
+                    span.set_status(trace.StatusCode.ERROR)
+                    error = ValueError("Current security symbol does not match current symbol")
+                    span.record_exception(error)
+                    raise error
+
+                if self.current_position is not None:
+                    if self.current_position.symbol != self.current_symbol:
+                        span.set_status(trace.StatusCode.ERROR)
+                        error = ValueError("Current position symbol does not match current symbol")
+                        span.record_exception(error)
+                        raise error
+
+                span.set_status(trace.StatusCode.OK)
+                return True
+
+    async def get_value_for_identifier(self, identifier: ContextIdentifier) -> Decimal:
+        with self._tracer.start_as_current_span("TradingContext.get_value_for_identifier") as span:
+            if not self.current_symbol:
+                error = ValueError("Current symbol is not set when trying to get value for identifier")
+                span.record_exception(error)
+                raise error
+            if not self.current_security:
+                error = ValueError("Current security is not set when trying to get value for identifier")
+                span.record_exception(error)
+                raise error
+
+            match identifier:
+
+                case ContextIdentifier.MA5:
+                    moving_average = self.current_security.compute_moving_average(Timeframe.D5)
+                    if moving_average is None:
+                        error = MissingContextValue(f"Moving average for {self.current_symbol} is not available")
+                        span.add_event(error.message)
+                        raise error
+                    return moving_average
+
+                case ContextIdentifier.MA20:
+                    moving_average = self.current_security.compute_moving_average(Timeframe.D20)
+                    if moving_average is None:
+                        error = MissingContextValue(f"Moving average for {self.current_symbol} is not available")
+                        span.add_event(error.message)
+                        raise error
+                    return moving_average
+
+                case ContextIdentifier.MA50:
+                    moving_average = self.current_security.compute_moving_average(Timeframe.D50)
+                    if moving_average is None:
+                        error = MissingContextValue(f"Moving average for {self.current_symbol} is not available")
+                        span.add_event(error.message)
+                        raise error
+                    return moving_average
+
+                case ContextIdentifier.MA100:
+                    moving_average = self.current_security.compute_moving_average(Timeframe.D100)
+                    if moving_average is None:
+                        error = MissingContextValue(f"Moving average for {self.current_symbol} is not available")
+                        span.add_event(error.message)
+                        raise error
+                    return moving_average
+
+                case ContextIdentifier.MA200:
+                    moving_average = self.current_security.compute_moving_average(Timeframe.D200)
+                    if moving_average is None:
+                        error = MissingContextValue(f"Moving average for {self.current_symbol} is not available")
+                        span.add_event(error.message)
+                        raise error
+                    return moving_average
+
+                case ContextIdentifier.AV5:
+                    average_volume = self.current_security.compute_average_volume(Timeframe.D5)
+                    if average_volume is None:
+                        error = MissingContextValue(f"Average volume for {self.current_symbol} is not available")
+                        span.add_event(error.message)
+                        raise error
+                    return average_volume
+
+                case ContextIdentifier.AV20:
+                    average_volume = self.current_security.compute_average_volume(Timeframe.D20)
+                    if average_volume is None:
+                        error = MissingContextValue(f"Average volume for {self.current_symbol} is not available")
+                        span.add_event(error.message)
+                        raise error
+                    return average_volume
+
+                case ContextIdentifier.AV50:
+                    average_volume = self.current_security.compute_average_volume(Timeframe.D50)
+                    if average_volume is None:
+                        error = MissingContextValue(f"Average volume for {self.current_symbol} is not available")
+                        span.add_event(error.message)
+                        raise error
+                    return average_volume
+
+                case ContextIdentifier.AV100:
+                    average_volume = self.current_security.compute_average_volume(Timeframe.D100)
+                    if average_volume is None:
+                        error = MissingContextValue(f"Average volume for {self.current_symbol} is not available")
+                        span.add_event(error.message)
+                        raise error
+                    return average_volume
+
+                case ContextIdentifier.AV200:
+                    average_volume = self.current_security.compute_average_volume(Timeframe.D200)
+                    if average_volume is None:
+                        error = MissingContextValue(f"Average volume for {self.current_symbol} is not available")
+                        span.add_event(error.message)
+                        raise error
+                    return average_volume
+
+                case ContextIdentifier.CURRENT_VOLUME:
+                    current_volume = self.current_security.current_bar.volume
+                    if current_volume is None:
+                        error = MissingContextValue(f"Current volume for {self.current_symbol} is not available")
+                        span.add_event(error.message)
+                        raise error
+                    return current_volume
+
+                case ContextIdentifier.CURRENT_PRICE:
+                    current_price = self.current_security.current_bar.close
+                    if current_price is None:
+                        error = MissingContextValue(f"Current price for {self.current_symbol} is not available")
+                        span.add_event(error.message)
+                        raise error
+                    return current_price
+
+                case ContextIdentifier.ACCOUNT_EXPOSURE:
+                    account_exposure = self.broker.get_account_exposure()
+                    if account_exposure is None:
+                        error = MissingContextValue("Account exposure is not available")
+                        span.add_event(error.message)
+                        raise error
+                    return account_exposure
+
+                case ContextIdentifier.NUMBER_OF_OPEN_POSITIONS:
+                    open_positions = self.broker.get_positions()
+                    if open_positions is None:
+                        error = MissingContextValue("Number of open positions is not available")
+                        span.add_event(error.message)
+                        raise error
+                    return len(open_positions)
+
+                case ContextIdentifier.AVAILABLE_CASH:
+                    available_cash = self.broker.get_available_cash()
+                    if available_cash is None:
+                        error = MissingContextValue("Available cash is not available")
+                        span.add_event(error.message)
+                        raise error
+                    return available_cash
+
+                case ContextIdentifier.AVERAGE_COST:
+                    if self.current_position is None:
+                        error = MissingContextValue("Average cost is not available as no position is open")
+                        span.add_event(error.message)
+                        raise error
+                    average_cost = self.current_position.average_cost
+                    if average_cost is None:
+                        error = MissingContextValue("Average cost is not available")
+                        span.add_event(error.message)
+                        raise error
+                    return average_cost
+                case _:
+                    span.set_status(trace.StatusCode.ERROR)
+                    error = ValueError(f"Invalid context identifier: {identifier}")
+                    span.record_exception(error)
+                    raise error

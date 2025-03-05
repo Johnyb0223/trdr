@@ -4,7 +4,7 @@ import yfinance as yf
 
 from .yf_bar_provider import YFBarProvider
 from ..exceptions import NoBarsForSymbolException, BarProviderException, InsufficientBarsException
-from ....utils.fake_yf_download import fake_yf_download
+from ....test_utils.fake_yf_download import fake_yf_download
 
 
 def test_that_only_symbols_with_data_are_in_the_data_cache(yf_bar_provider_with_fake_data):

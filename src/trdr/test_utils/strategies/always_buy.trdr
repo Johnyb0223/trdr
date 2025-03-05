@@ -1,0 +1,13 @@
+STRATEGY
+    NAME "Always Buy Strategy"
+    DESCRIPTION "Test strategy that always buys"
+    ENTRY
+        ALL_OF
+            CURRENT_PRICE > 0
+    EXIT
+        ANY_OF
+            CURRENT_PRICE < 0
+    SIZING
+        RULE
+            DOLLAR_AMOUNT 
+                1000

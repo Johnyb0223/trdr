@@ -7,7 +7,8 @@ from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExport
 from trdr.core.bar_provider.yf_bar_provider.yf_bar_provider import YFBarProvider
 from trdr.core.security_provider.security_provider import SecurityProvider
 from trdr.core.broker.mock_broker.mock_broker import MockBroker
-from trdr.core.strategy.strategy import Strategy
+from trdr.core.trading_engine.trading_engine import TradingEngine
+from trdr.core.trading_context.trading_context import TradingContext
 
 if __name__ == "__main__":
 
@@ -19,11 +20,14 @@ if __name__ == "__main__":
         trace.set_tracer_provider(tracer_provider)
         tracer = trace.get_tracer("trdr")
         try:
-            bar_provider = await YFBarProvider.create(["AAPL"], tracer)
+            bar_provider = await YFBarProvider.create(["TSLA"], tracer)
             async with await MockBroker.create(tracer=tracer) as broker:
                 security_provider = await SecurityProvider.create(bar_provider, tracer)
-                strategy = await Strategy.create("first-strat", broker, security_provider, tracer)
-                await strategy.execute()
+                context = await TradingContext.create(security_provider, broker, tracer)
+                engine = await TradingEngine.create(
+                    "first-strat", context, strategies_dir="./examples/strategies", tracer=tracer
+                )
+                await engine.execute()
 
         except Exception as e:
             print(e)

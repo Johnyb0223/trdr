@@ -1,0 +1,2 @@
+class MissingContextValue(Exception):
+    pass
