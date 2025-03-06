@@ -17,15 +17,15 @@ class BasePDTStrategy(ABC):
         self = cls.__new__(cls)
         BasePDTStrategy.__init__(self, tracer=tracer)
         return self
-        
+
     @abstractmethod
     def evaluate_order(self, context: PDTContext) -> PDTDecision:
         """
         Evaluate a proposed order against PDT rules using the provided context.
-        
+
         Args:
             context: A PDTContext object containing all relevant information
-            
+
         Returns:
             A PDTDecision indicating whether the order is allowed and any modifications
         """

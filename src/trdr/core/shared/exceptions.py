@@ -1,4 +1,2 @@
 class TradingDateException(Exception):
     pass
-
-

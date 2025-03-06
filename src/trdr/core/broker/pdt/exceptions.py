@@ -12,4 +12,5 @@ class PDTStrategyException(BrokerException):
 
 class PDTRuleViolationException(PDTStrategyException):
     """Exception raised when a PDT rule would be violated by an action."""
+
     pass

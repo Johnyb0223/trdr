@@ -44,6 +44,3 @@ class Bar(BaseModel):
             f"Bar(timestamp={self.trading_datetime}, open={self.open}, "
             f"high={self.high}, low={self.low}, close={self.close}, volume={self.volume})"
         )
-
-
-

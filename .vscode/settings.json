@@ -1,7 +1,22 @@
 {
-    "python.testing.pytestArgs": [
-        "."
+    "git.enableSmartCommit": true,
+    "git.autofetch": true,
+    "editor.accessibilitySupport": "off",
+    "editor.foldingMaximumRegions": 15000,
+    "editor.formatOnSave": true,
+    "editor.inlineSuggest.enabled": true,
+    "github.copilot.enable": {
+        "*": true
+    },
+    "[python]": {
+        "editor.formatOnSave": true,
+        "editor.defaultFormatter": "ms-python.black-formatter"
+    },
+    "javascript.updateImportsOnFileMove.enabled": "always",
+    "[json]": {
+        "editor.defaultFormatter": "vscode.json-language-features"
+    },
+    "black-formatter.args": [
+        "--line-length=120"
     ],
-    "python.testing.unittestEnabled": false,
-    "python.testing.pytestEnabled": true
 }

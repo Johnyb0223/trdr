@@ -19,18 +19,18 @@ T = TypeVar("T", bound="BaseBroker")
 class BaseBroker(ABC):
     """
     Abstract base class for executing trades and managing account information.
-    
+
     The broker is responsible for:
     1. Executing buy and sell orders
     2. Tracking positions, cash, and equity values
     3. Enforcing Pattern Day Trading (PDT) rules
     4. Managing authentication and communication with trading APIs
-    
+
     All broker implementations should provide proper state management, with
     automatic refreshing of stale data and complete OpenTelemetry instrumentation.
     The broker maintains several internal state variables that track account values,
     including equity, cash, and positions.
-    
+
     Attributes:
         _session: HTTP client session for API communication
         _pdt_strategy: Strategy for enforcing Pattern Day Trading rules
@@ -68,19 +68,19 @@ class BaseBroker(ABC):
     ) -> T:
         """
         Factory method to create and initialize a broker instance.
-        
+
         This async factory method handles proper initialization of resources
         including HTTP sessions, initial account data fetching, and PDT rule
         strategy setup. It uses the template method pattern to allow concrete
         implementations to define their specific initialization logic.
-        
+
         Args:
             pdt_strategy: Strategy for Pattern Day Trading rule enforcement
             tracer: OpenTelemetry tracer for instrumentation
-            
+
         Returns:
             An initialized instance of the concrete broker
-            
+
         Raises:
             Various exceptions depending on implementation, typically related to
             authentication or connectivity issues
@@ -128,26 +128,26 @@ class BaseBroker(ABC):
     async def _position_opened_today(self, symbol: str) -> bool:
         """
         Determine if a specific position was opened today.
-        
+
         Implement the broker-specific logic to determine if a position
         for the given symbol was opened today, which is needed for
         PDT rule calculations.
-        
+
         Args:
             symbol: The ticker symbol to check
-            
+
         Returns:
             bool: True if the position was opened today, False otherwise
         """
         pass
-        
+
     async def _get_positions_opened_today_count(self) -> int:
         """
         Get the count of positions opened today.
-        
+
         This method counts all positions that were opened today by
         iterating through the current positions and checking each one.
-        
+
         Returns:
             int: Number of positions opened today
         """
@@ -242,15 +242,15 @@ class BaseBroker(ABC):
     async def _validate_pre_order(self, symbol: str, side: OrderSide, dollar_amount: Money) -> None:
         """
         Validate a proposed order against PDT rules and other constraints.
-        
+
         This method creates a PDTContext with all relevant information and
         passes it to the PDT strategy for evaluation.
-        
+
         Args:
             symbol: The ticker symbol for the order
             side: Buy or sell
             dollar_amount: The dollar amount of the order
-            
+
         Raises:
             PDTRuleViolationException: If the order would violate PDT rules
             Exception: For other validation failures
@@ -261,9 +261,9 @@ class BaseBroker(ABC):
             side=side,
             amount=dollar_amount,
             rolling_day_trade_count=self._day_trade_count,
-            equity=self._equity
+            equity=self._equity,
         )
-        
+
         # Add additional information based on order side
         if side == OrderSide.BUY:
             # For buy orders, we need the count of positions opened today
@@ -273,17 +273,17 @@ class BaseBroker(ABC):
             position = self._positions.get(symbol)
             if not position:
                 raise Exception(f"Cannot sell {symbol}: no position exists")
-                
+
             context.position_opened_today = await self._position_opened_today(symbol)
-        
+
         # Let the strategy evaluate the context
         decision = self._pdt_strategy.evaluate_order(context)
-        
+
         # Process the decision
         if not decision.allowed:
             reason = decision.reason or "PDT restrictions prevent this order"
             raise PDTRuleViolationException(reason)
-            
+
         # Additional common verifications can be incorporated here
 
     def _clear_current_state(self) -> None:

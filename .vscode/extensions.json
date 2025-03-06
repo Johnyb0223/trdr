@@ -1,0 +1,11 @@
+{
+    "recommendations": [
+        "esbenp.prettier-vscode",
+        "ms-python.black-formatter",
+        "ms-python.python",
+        "github.vscode-github-actions",
+        "pulumi.pulumi-vscode-tools",
+        "ms-python.vscode-pylance",
+        "eamodio.gitlens"
+    ]
+}

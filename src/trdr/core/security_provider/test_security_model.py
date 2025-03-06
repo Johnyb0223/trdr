@@ -1,7 +1,7 @@
 import pytest
 
-from src.trdr.core.security_provider.models import Timeframe
-from ...utils.security_generator import Criteria, Crossover
+from ..security_provider.models import Timeframe
+from ...test_utils.security_generator import Criteria, Crossover
 
 
 def test_compute_average_volume(get_random_security):
