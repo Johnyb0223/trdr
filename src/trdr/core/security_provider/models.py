@@ -3,7 +3,6 @@ from pydantic import BaseModel, model_validator, ConfigDict
 from decimal import Decimal
 
 from ..bar_provider.models import Bar
-from ..bar_provider.exceptions import InsufficientBarsException
 from ..shared.models import Money, Timeframe
 
 

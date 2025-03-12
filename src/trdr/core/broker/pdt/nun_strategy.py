@@ -1,16 +1,23 @@
 from .base_pdt_strategy import BasePDTStrategy
 from .models import PDTContext, PDTDecision
-from ..models import OrderSide
+from ..models import OrderSide, PositionSide
+from .exceptions import PDTStrategyException
 
 
 class NunStrategy(BasePDTStrategy):
-    """Conservative strategy - only open positions we can safely close
+    """Pattern Day Trading (PDT) strategy that implements a conservative approach to position management.
 
-    This strategy ensures we always have enough day trades available to close positions:
-    - If we have 2 day trades used, we can only open 1 more position
-    - If we have 1 day trade used, we can open 2 positions
-    - If we have 0 day trades used, we can open 3 positions
-    - results in us only being able to open 3 positions on any given day
+    This strategy ensures compliance with PDT rules by maintaining enough day trades to safely close positions.
+    The core logic reserves day trades for closing positions, limiting new position opens based on available
+    day trades.
+
+    Key Rules:
+    - Maximum of 3 day trades per rolling window
+    - New positions can only be opened if there are enough day trades reserved for closing
+    - Position increases count as new positions for day trade purposes
+
+    Attributes:
+        Inherits all attributes from BasePDTStrategy
     """
 
     def __init__(
@@ -22,37 +29,60 @@ class NunStrategy(BasePDTStrategy):
         raise TypeError("Use NunStrategy.create() instead to create a new NunStrategy")
 
     def evaluate_order(self, context: PDTContext) -> PDTDecision:
-        """
-        Evaluate a proposed order against PDT rules, ensuring we always have
-        enough day trades available to close positions if needed.
+        """Evaluates if a proposed order complies with PDT rules based on current trading context.
+
+        The evaluation follows these steps:
+        1. For new positions: checks if we have enough day trades reserved for closing
+        2. For existing positions:
+            - If increasing position: treats it like opening a new position
+            - If closing position: always allowed since day trades were reserved
 
         Args:
-            context: PDT context with all relevant information
+            context (PDTContext): Contains current trading state including:
+                - count_of_positions_opened_today: Number of new positions opened
+                - rolling_day_trade_count: Number of day trades used in current window
+                - position: Current position details if one exists
+                - order: Proposed order details
 
         Returns:
-            PDTDecision with the evaluation result
+            PDTDecision: Contains:
+                - allowed: Boolean indicating if order is permitted
+                - reason: String explaining the decision
+
+        Raises:
+            PDTStrategyException: If an unhandled case is encountered
         """
-        if context.side == OrderSide.BUY:
-            available_day_trades = 3 - context.rolling_day_trade_count
-            if context.positions_opened_today < available_day_trades:
-                return PDTDecision(allowed=True, reason="Order allowed: sufficient day trades available")
-            else:
+
+        number_of_positions_opened_today = context.count_of_positions_opened_today
+        rolling_day_trade_count = context.rolling_day_trade_count
+
+        # If we have no open position for order.symbol, we need to check if we can open a new position
+        if context.position is None:
+            if number_of_positions_opened_today + rolling_day_trade_count >= 3:
                 return PDTDecision(
                     allowed=False,
                     reason="PDT restrictions prevent opening a new position: insufficient day trades available",
                 )
-        elif context.side == OrderSide.SELL:
-            if not context.position_opened_today:
-                # Not a day trade if position wasn't opened today
-                return PDTDecision(allowed=True, reason="Order allowed: not a day trade")
+            return PDTDecision(allowed=True, reason="Order allowed: sufficient day trades available")
 
-            # If position was opened today, we need available day trades
-            if context.rolling_day_trade_count < 3:
-                return PDTDecision(allowed=True, reason="Order allowed: day trade available for position opened today")
+        if context.position is not None:
+            # if we are adding to a current position, we need to check if we can open a new position
+            if (context.position.side == PositionSide.LONG and context.order.side == OrderSide.BUY) or (
+                context.position.side == PositionSide.SHORT and context.order.side == OrderSide.SELL
+            ):
+                if number_of_positions_opened_today + rolling_day_trade_count >= 3:
+                    return PDTDecision(
+                        allowed=False,
+                        reason="PDT restrictions prevent opening a new position: insufficient day trades available",
+                    )
+                return PDTDecision(allowed=True, reason="Order allowed: sufficient day trades available")
             else:
+                """
+                we can always close a position as we would not be able to open a new position if we didn't have enough day trades available to close it
+                """
                 return PDTDecision(
-                    allowed=False, reason="PDT restrictions prevent closing this position: no day trades available"
+                    allowed=True,
+                    reason="PDT restrictions prevent opening a new position: order side does not match position side",
                 )
 
-        # Fallback for any other order types
-        return PDTDecision(allowed=False, reason="Unknown order type")
+        raise PDTStrategyException(f"We did not handle this case: {context}")

@@ -2,9 +2,9 @@ from typing import List
 from decimal import Decimal
 import random
 import datetime
-import matplotlib.pyplot as plt
 from pydantic import BaseModel, ConfigDict
 from typing import Literal
+
 from ..core.bar_provider.models import Bar
 from ..core.shared.models import Money, TradingDateTime, Timeframe
 from ..core.security_provider.models import Security
@@ -22,7 +22,7 @@ class Crossover(BaseModel):
     ma2: Timeframe
 
 
-class Criteria(BaseModel):
+class SecurityCriteria(BaseModel):
     count: int
     start_price: Money | None = Money(amount=Decimal(random.randint(10, 500)))
     start_volume: int | None = random.randint(1000, 100000)
@@ -33,7 +33,7 @@ class Criteria(BaseModel):
 
 
 class SecurityGenerator:
-    def __init__(self, criteria: Criteria):
+    def __init__(self, criteria: SecurityCriteria):
         self.criteria = criteria
 
     def create_dummy_bars(self, count: int, start_price: Money, start_volume: int) -> List["Bar"]:
@@ -145,7 +145,7 @@ class SecurityGenerator:
 
 
 if __name__ == "__main__":
-    criteria = Criteria(
+    criteria = SecurityCriteria(
         count=100,
         moving_averages=[MovingAverage(timeframe=Timeframe.d5, target=Decimal(100), operator=">")],
         crossovers=[Crossover(type="golden_cross", ma1=Timeframe.d5, ma2=Timeframe.d20)],

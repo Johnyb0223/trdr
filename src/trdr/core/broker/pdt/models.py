@@ -1,8 +1,8 @@
 from typing import Optional, Dict, Any
 from pydantic import BaseModel, ConfigDict
 
-from ...shared.models import Money
-from ..models import OrderSide
+
+from ..models import Position, Order
 
 
 class PDTContext(BaseModel):
@@ -15,19 +15,12 @@ class PDTContext(BaseModel):
     """
 
     # Order information
-    symbol: str
-    side: OrderSide
-    amount: Optional[Money] = None
+    order: Order
+    position: Optional[Position] = None
 
     # Account state
-    positions_opened_today: int = 0
+    count_of_positions_opened_today: int = 0
     rolling_day_trade_count: int = 0
-    position_opened_today: bool = False  # For the specific symbol in the order
-
-    # Additional information
-    equity: Optional[Money] = None
-    broker_name: Optional[str] = None
-    broker_specific_data: Dict[str, Any] = {}
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 

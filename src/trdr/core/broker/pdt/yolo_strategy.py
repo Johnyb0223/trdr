@@ -40,8 +40,11 @@ class YoloStrategy(BasePDTStrategy):
                 # Only allow selling if position wasn't opened today
                 return PDTDecision(allowed=True, reason="Order allowed: position not opened today")
             else:
-                # Never allow same-day sells
-                return PDTDecision(allowed=False, reason="Cannot sell position opened today under YOLO strategy")
+                # Sell if we have day trades available
+                if context.rolling_day_trade_count < 3:
+                    return PDTDecision(allowed=True, reason="Order allowed: position opened today")
+                else:
+                    return PDTDecision(allowed=False, reason="Cannot sell position opened today under YOLO strategy")
 
         # Fallback for any other order types
         return PDTDecision(allowed=False, reason="Unknown order type")

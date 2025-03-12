@@ -6,9 +6,8 @@ from opentelemetry.trace import NoOpTracer
 from decimal import Decimal
 from datetime import timedelta
 
-from .models import Position, OrderSide
+from .models import Order, Position
 from ..shared.models import Money, TradingDateTime
-from .pdt.nun_strategy import NunStrategy
 from .pdt.base_pdt_strategy import BasePDTStrategy
 from .pdt.models import PDTContext
 from .pdt.exceptions import PDTRuleViolationException
@@ -43,7 +42,7 @@ class BaseBroker(ABC):
         _is_stale_flag: Flag indicating if data needs refreshing
     """
 
-    def __init__(self, pdt_strategy: Optional[BasePDTStrategy], tracer: trace.Tracer):
+    def __init__(self, pdt_strategy: BasePDTStrategy, tracer: trace.Tracer):
         """Initialize the broker with pattern day trading strategy and tracer support.
 
         Args:
@@ -63,8 +62,8 @@ class BaseBroker(ABC):
     @classmethod
     async def create(
         cls: Type[T],
-        pdt_strategy: Optional[BasePDTStrategy] = None,
-        tracer: Optional[trace.Tracer] = NoOpTracer(),
+        pdt_strategy: BasePDTStrategy,
+        tracer: trace.Tracer | None = NoOpTracer(),
     ) -> T:
         """
         Factory method to create and initialize a broker instance.
@@ -86,8 +85,6 @@ class BaseBroker(ABC):
             authentication or connectivity issues
         """
         self = cls.__new__(cls)
-        if not pdt_strategy:
-            pdt_strategy = NunStrategy.create(tracer=tracer)
         BaseBroker.__init__(self, pdt_strategy=pdt_strategy, tracer=tracer)
         with self._tracer.start_as_current_span("BaseBroker.create") as span:
             try:
@@ -108,10 +105,41 @@ class BaseBroker(ABC):
 
     @abstractmethod
     async def _refresh(self):
+        await self._refresh_positions()
+        await self._refresh_cash()
+        await self._refresh_equity()
+        await self._refresh_day_trade_count()
+
+    @abstractmethod
+    async def _refresh_positions(self):
+        """
+        Refresh the positions from the broker.
+        """
         pass
 
     @abstractmethod
-    async def _place_order(self, symbol: str, side: OrderSide, dollar_amount: Money) -> None:
+    async def _refresh_cash(self):
+        """
+        Refresh the cash from the broker.
+        """
+        pass
+
+    @abstractmethod
+    async def _refresh_equity(self):
+        """
+        Refresh the equity from the broker.
+        """
+        pass
+
+    @abstractmethod
+    async def _refresh_day_trade_count(self):
+        """
+        Refresh the day trade count from the broker.
+        """
+        pass
+
+    @abstractmethod
+    async def _place_order(self, order: Order) -> None:
         """
         Implement the low-level order placement logic specific to the subclass (e.g., interaction with the API).
         """
@@ -123,39 +151,6 @@ class BaseBroker(ABC):
         Implement the low-level order cancellation logic specific to the subclass (e.g., interaction with the API).
         """
         pass
-
-    @abstractmethod
-    async def _position_opened_today(self, symbol: str) -> bool:
-        """
-        Determine if a specific position was opened today.
-
-        Implement the broker-specific logic to determine if a position
-        for the given symbol was opened today, which is needed for
-        PDT rule calculations.
-
-        Args:
-            symbol: The ticker symbol to check
-
-        Returns:
-            bool: True if the position was opened today, False otherwise
-        """
-        pass
-
-    async def _get_positions_opened_today_count(self) -> int:
-        """
-        Get the count of positions opened today.
-
-        This method counts all positions that were opened today by
-        iterating through the current positions and checking each one.
-
-        Returns:
-            int: Number of positions opened today
-        """
-        count = 0
-        for symbol in self._positions:
-            if await self._position_opened_today(symbol):
-                count += 1
-        return count
 
     async def get_available_cash(self) -> Money:
         with self._tracer.start_as_current_span("BaseBroker.get_cash") as span:
@@ -194,7 +189,7 @@ class BaseBroker(ABC):
                 span.set_attribute("account_exposure", "0")
                 return Decimal(0)
             exposure = (
-                sum([position.quantity * position.average_cost.amount for position in self._positions.values()])
+                sum([position.size() * position.average_cost().amount for position in self._positions.values()])
                 / self._equity.amount
             )
             span.set_attribute("account_exposure", str(exposure))
@@ -216,7 +211,18 @@ class BaseBroker(ABC):
             span.set_status(trace.StatusCode.OK)
             return exposure
 
-    async def place_order(self, symbol: str, side: OrderSide, dollar_amount: Money) -> None:
+    async def get_count_of_positions_opened_today(self) -> int:
+        with self._tracer.start_as_current_span("BaseBroker.get_count_of_positions_opened_today") as span:
+            await self._stale_handler()
+            count = 0
+            for symbol in self._positions:
+                if await self._position_opened_today(symbol):
+                    count += 1
+            span.set_status(trace.StatusCode.OK)
+            span.set_attribute("positions_opened_today_count", str(count))
+            return count
+
+    async def place_order(self, order: Order) -> None:
         """
         This is the concrete place_order method in BaseBroker.
         It performs a state refresh check, runs PDT logic, delegates to the implementation-specific _execute_order,
@@ -225,12 +231,14 @@ class BaseBroker(ABC):
         with self._tracer.start_as_current_span("BaseBroker.place_order") as span:
             await self._stale_handler()
 
-            await self._validate_pre_order(symbol, side, dollar_amount)
-            await self._place_order(symbol, side, dollar_amount)
+            await self._validate_pre_order(order)
+            await self._place_order(order)
             self._is_stale_flag = True
             span.set_status(trace.StatusCode.OK)
             span.add_event(
-                "Order opened successfully: symbol={}, side={}, dollar_amount={}".format(symbol, side, dollar_amount)
+                "Order opened successfully: symbol={}, side={}, quantity={}".format(
+                    order.symbol, order.side, order.quantity
+                )
             )
 
     async def cancel_all_orders(self) -> None:
@@ -239,7 +247,7 @@ class BaseBroker(ABC):
             self._is_stale_flag = True
             span.set_status(trace.StatusCode.OK)
 
-    async def _validate_pre_order(self, symbol: str, side: OrderSide, dollar_amount: Money) -> None:
+    async def _validate_pre_order(self, order: Order) -> None:
         """
         Validate a proposed order against PDT rules and other constraints.
 
@@ -257,24 +265,11 @@ class BaseBroker(ABC):
         """
         # Create PDT context with all relevant information
         context = PDTContext(
-            symbol=symbol,
-            side=side,
-            amount=dollar_amount,
+            order=order,
+            position=self._positions.get(order.symbol, None),
             rolling_day_trade_count=self._day_trade_count,
-            equity=self._equity,
+            count_of_positions_opened_today=await self.get_count_of_positions_opened_today(),
         )
-
-        # Add additional information based on order side
-        if side == OrderSide.BUY:
-            # For buy orders, we need the count of positions opened today
-            context.positions_opened_today = await self._get_positions_opened_today_count()
-        elif side == OrderSide.SELL:
-            # For sell orders, we need to know if this specific position was opened today
-            position = self._positions.get(symbol)
-            if not position:
-                raise Exception(f"Cannot sell {symbol}: no position exists")
-
-            context.position_opened_today = await self._position_opened_today(symbol)
 
         # Let the strategy evaluate the context
         decision = self._pdt_strategy.evaluate_order(context)

@@ -1,18 +1,36 @@
 import asyncio
 import pytest
 import yfinance as yf
-from decimal import Decimal
-
+import random
+import datetime
 from .core.security_provider.security_provider import SecurityProvider
 from .core.bar_provider.yf_bar_provider.yf_bar_provider import YFBarProvider
-from .core.shared.models import Money
 from .test_utils.fake_yf_download import fake_yf_download
-from .test_utils.security_generator import SecurityGenerator, Criteria
+from .test_utils.security_generator import SecurityGenerator, SecurityCriteria
+from .test_utils.position_generator import PositionGenerator, PositionCriteria
+from .test_utils.order_generator import OrderGenerator, OrderCriteria
 from .core.broker.mock_broker.mock_broker import MockBroker
+from .core.broker.pdt.nun_strategy import NunStrategy
 from .core.broker.pdt.wiggle_strategy import WiggleStrategy
 from .core.broker.pdt.yolo_strategy import YoloStrategy
-from .core.broker.models import Position, PositionSide
-from .core.trading_engine.trading_engine import TradingEngine
+from .core.trading_context.trading_context import TradingContext
+from .core.shared.models import TradingDateTime
+
+
+@pytest.fixture(scope="function")
+def weekday_trading_datetime():
+    trading_now = TradingDateTime.now()
+    while trading_now.is_weekend:
+        trading_now = trading_now + datetime.timedelta(days=1)
+    return trading_now
+
+
+@pytest.fixture(scope="function")
+def weekend_trading_datetime():
+    trading_now = TradingDateTime.now()
+    while not trading_now.is_weekend:
+        trading_now = trading_now + datetime.timedelta(days=1)
+    return trading_now
 
 
 @pytest.fixture(scope="function")
@@ -38,7 +56,7 @@ def random_security(symbol="AAPL", count=200):
     Returns:
         A Security instance with randomly generated price and volume data
     """
-    generator = SecurityGenerator(Criteria(count=count))
+    generator = SecurityGenerator(SecurityCriteria(count=count))
     security = generator.find_suitable_security()
     # Override the symbol if requested
     if symbol != security.symbol:
@@ -49,45 +67,44 @@ def random_security(symbol="AAPL", count=200):
 @pytest.fixture(scope="function")
 def get_random_security():
     """Legacy fixture name for backward compatibility."""
-    generator = SecurityGenerator(Criteria(count=200))
+    generator = SecurityGenerator(SecurityCriteria(count=200))
     return generator.find_suitable_security()
 
 
 @pytest.fixture(scope="module")
 def security_generator():
     """Return a configured SecurityGenerator instance."""
-    return SecurityGenerator(Criteria(count=200))
+    return SecurityGenerator(SecurityCriteria(count=200))
 
 
 @pytest.fixture(scope="function")
-def dummy_position(symbol="AAPL"):
+def short_dummy_position():
     """Create a test position with default values."""
-    return Position(
-        symbol=symbol,
-        quantity=Decimal(10),
-        average_cost=Money(amount=Decimal(100)),
-        side=PositionSide.LONG,
-    )
+    position = PositionGenerator(criteria=PositionCriteria(count=1, net_position_bias=0)).generate_positions()[0]
+    return position
 
 
 @pytest.fixture(scope="function")
-def dummy_positions(dummy_position):
+def long_dummy_position():
+    """Create a test position with default values."""
+    position = PositionGenerator(criteria=PositionCriteria(count=1, net_position_bias=1)).generate_positions()[0]
+    return position
+
+
+@pytest.fixture(scope="function")
+def dummy_positions():
     """Create a dictionary of test positions."""
-    positions = {
-        "AAPL": dummy_position,
-        "MSFT": Position(
-            symbol="MSFT",
-            quantity=Decimal(5),
-            average_cost=Money(amount=Decimal(200)),
-            side=PositionSide.LONG,
-        ),
-    }
+    num_positions = random.randint(1, 9)
+    positions = PositionGenerator(
+        criteria=PositionCriteria(count=num_positions, net_position_bias=0.5)
+    ).generate_positions()
     return positions
 
 
 @pytest.fixture(scope="function")
-def mock_broker():
-    broker = asyncio.run(MockBroker.create())
+def mock_broker_with_nun_strategy():
+    nun_strategy = NunStrategy.create()
+    broker = asyncio.run(MockBroker.create(nun_strategy=nun_strategy))
     yield broker
     asyncio.run(broker._session.close())
 
@@ -110,39 +127,14 @@ def mock_broker_with_yolo_strategy():
 
 
 @pytest.fixture(scope="function")
-def mock_trading_engine(mock_broker, security_provider_with_fake_data):
-    engine = asyncio.run(
-        TradingEngine.create(
-            "test_strat.trdr",
-            mock_broker,
-            security_provider_with_fake_data,
-            strategies_dir="src/trdr/test_utils/strategies",
-        )
-    )
-    return engine
+def mock_trading_context(security_provider_with_fake_data, mock_broker_with_nun_strategy):
+    return asyncio.run(TradingContext.create(security_provider_with_fake_data, mock_broker_with_nun_strategy))
 
 
 @pytest.fixture(scope="function")
-def mock_trading_engine_always_buy(mock_broker, security_provider_with_fake_data):
-    engine = asyncio.run(
-        TradingEngine.create(
-            "always_buy.trdr",
-            mock_broker,
-            security_provider_with_fake_data,
-            strategies_dir="src/trdr/test_utils/strategies",
-        )
-    )
-    return engine
+def create_order():
 
+    def _create_order(symbol: str, side=None):
+        return OrderGenerator(criteria=OrderCriteria(count=1, symbol=symbol, side=side)).generate_orders()[0]
 
-@pytest.fixture(scope="function")
-def mock_trading_engine_always_sell(mock_broker, security_provider_with_fake_data):
-    engine = asyncio.run(
-        TradingEngine.create(
-            "always_sell.trdr",
-            mock_broker,
-            security_provider_with_fake_data,
-            strategies_dir="src/trdr/test_utils/strategies",
-        )
-    )
-    return engine
+    return _create_order

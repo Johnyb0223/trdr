@@ -13,7 +13,8 @@ from ..exceptions import (
     BarConversionException,
 )
 from ..base_bar_provider import BaseBarProvider
-from ..models import Bar, TradingDateTime, Money, Timeframe
+from ..models import Bar, TradingDateTime, Money
+from ...shared.models import Timeframe
 
 # Disable yfinance logging
 logger = logging.getLogger("yfinance")

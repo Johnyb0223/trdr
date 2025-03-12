@@ -1,7 +1,7 @@
 import pytest
 
 from ..security_provider.models import Timeframe
-from ...test_utils.security_generator import Criteria, Crossover
+from ...test_utils.security_generator import SecurityCriteria, Crossover
 
 
 def test_compute_average_volume(get_random_security):
@@ -34,7 +34,7 @@ def test_invalid_timeframe(get_random_security):
 
 def test_bullish_crossover(security_generator):
     crossover = Crossover(type="golden_cross", ma1=Timeframe.d5, ma2=Timeframe.d20)
-    criteria = Criteria(count=200, crossovers=[crossover])
+    criteria = SecurityCriteria(count=200, crossovers=[crossover])
     generator = security_generator
     generator.criteria = criteria
     security = generator.find_suitable_security()
@@ -44,7 +44,7 @@ def test_bullish_crossover(security_generator):
 
 def test_bearish_crossover(security_generator):
     crossover = Crossover(type="death_cross", ma1=Timeframe.d5, ma2=Timeframe.d20)
-    criteria = Criteria(count=200, crossovers=[crossover])
+    criteria = SecurityCriteria(count=200, crossovers=[crossover])
     generator = security_generator
     generator.criteria = criteria
     security = generator.find_suitable_security()

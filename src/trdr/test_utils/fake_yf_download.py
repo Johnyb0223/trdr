@@ -21,11 +21,11 @@ def fake_yf_download(*args, **kwargs):
         ("MSFT", "Close"): [205, 206, 207],
         ("MSFT", "Volume"): [2000, 2100, 2200],
         # this is what is returned when a symbol is not found
-        ("ABCDEFG", "Open"): [None, None, None],
-        ("ABCDEFG", "High"): [None, None, None],
-        ("ABCDEFG", "Low"): [None, None, None],
-        ("ABCDEFG", "Close"): [None, None, None],
-        ("ABCDEFG", "Volume"): [None, None, None],
+        ("ABCDEFG", "Open"): [231, 232, 233],
+        ("ABCDEFG", "High"): [241, 242, 243],
+        ("ABCDEFG", "Low"): [251, 252, 253],
+        ("ABCDEFG", "Close"): [261, 262, 263],
+        ("ABCDEFG", "Volume"): [271, 272, 273],
         # this is what is returned when we hit the rate limit
         ("AMZN", "Open"): None,
         ("AMZN", "High"): None,

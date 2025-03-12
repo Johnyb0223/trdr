@@ -4,8 +4,7 @@ from decimal import Decimal
 
 from ..models import OrderSide
 from ...shared.models import Money
-from ..pdt.exceptions import PDTRuleViolationException
-from ..pdt.models import PDTContext, PDTDecision
+from ..pdt.exceptions import PDTRuleViolationException, PDTStrategyException
 
 # ======================================================================
 # Helper Functions
@@ -15,9 +14,9 @@ from ..pdt.models import PDTContext, PDTDecision
 def reset_broker_state(broker, day_trade_count=0):
     """Reset broker to a known state for testing."""
     broker._day_trade_count = day_trade_count
-    asyncio.run(broker.set_position_opened_today("MSFT", False))
-    asyncio.run(broker.set_position_opened_today("AAPL", False))
-    asyncio.run(broker.set_position_opened_today("GOOG", False))
+    # Reset positions opened today flags
+    asyncio.run(broker.set_position_opened_today("TSLA", False))
+    asyncio.run(broker.set_position_opened_today("NVDA", False))
 
 
 # ======================================================================
@@ -33,25 +32,42 @@ def test_position_opened_today_tracking(mock_broker):
     reset_broker_state(broker)
 
     # Initially no positions should be marked as opened today
-    assert asyncio.run(broker._get_positions_opened_today_count()) == 0
-    assert asyncio.run(broker._position_opened_today("MSFT")) is False
-    assert asyncio.run(broker._position_opened_today("AAPL")) is False
-    assert asyncio.run(broker._position_opened_today("GOOG")) is False
+    assert asyncio.run(broker.get_positions_opened_today_count()) == 0
+    assert asyncio.run(broker.position_opened_today("TSLA")) is False
+    assert asyncio.run(broker.position_opened_today("NVDA")) is False
 
     # Mark a position as opened today
-    asyncio.run(broker.set_position_opened_today("MSFT", True))
-    assert asyncio.run(broker._position_opened_today("MSFT")) is True
-    assert asyncio.run(broker._get_positions_opened_today_count()) == 1
+    asyncio.run(broker.set_position_opened_today("TSLA", True))
+    assert asyncio.run(broker.position_opened_today("TSLA")) is True
+    assert asyncio.run(broker.get_positions_opened_today_count()) == 1
 
     # Mark multiple positions
-    asyncio.run(broker.set_position_opened_today("AAPL", True))
-    asyncio.run(broker.set_position_opened_today("GOOG", True))
-    assert asyncio.run(broker._get_positions_opened_today_count()) == 3
+    asyncio.run(broker.set_position_opened_today("NVDA", True))
+    assert asyncio.run(broker.get_positions_opened_today_count()) == 2
 
     # Unmark a position
-    asyncio.run(broker.set_position_opened_today("MSFT", False))
-    assert asyncio.run(broker._position_opened_today("MSFT")) is False
-    assert asyncio.run(broker._get_positions_opened_today_count()) == 2
+    asyncio.run(broker.set_position_opened_today("TSLA", False))
+    assert asyncio.run(broker.position_opened_today("TSLA")) is False
+    assert asyncio.run(broker.get_positions_opened_today_count()) == 1
+
+
+def test_position_opened_today_tracking_with_triggers_refresh(mock_broker):
+    """Test the position_opened_today tracking mechanism with triggers refresh."""
+    broker = mock_broker
+
+    # Reset to known state
+    reset_broker_state(broker)
+
+    # Mark a position as opened today
+    asyncio.run(broker.set_position_opened_today("TSLA", True))
+    assert asyncio.run(broker.position_opened_today("TSLA")) is True
+    assert asyncio.run(broker.get_positions_opened_today_count()) == 1
+
+    # Calls to these methods should trigger a refresh
+    broker._is_stale_flag = True
+    assert asyncio.run(broker.position_opened_today("TSLA")) is True
+    assert asyncio.run(broker.get_positions_opened_today_count()) == 1
+    assert broker._is_stale_flag is False
 
 
 # ======================================================================
@@ -98,29 +114,27 @@ def test_nun_strategy_buy_orders_position_limits(mock_broker):
     broker._day_trade_count = 2
 
     # Test with increasing number of positions opened today
-    for positions_count in range(4):
+    for positions_count in range(3):
         reset_broker_state(broker, 2)  # Keep day trade count at 2
 
         # Set the specified number of positions as opened today
         if positions_count >= 1:
-            asyncio.run(broker.set_position_opened_today("MSFT", True))
+            asyncio.run(broker.set_position_opened_today("TSLA", True))
         if positions_count >= 2:
-            asyncio.run(broker.set_position_opened_today("AAPL", True))
-        if positions_count >= 3:
-            asyncio.run(broker.set_position_opened_today("GOOG", True))
+            asyncio.run(broker.set_position_opened_today("NVDA", True))
 
         # Verify the count is set correctly
-        assert asyncio.run(broker._get_positions_opened_today_count()) == positions_count
+        assert asyncio.run(broker.get_positions_opened_today_count()) == positions_count
 
         # NunStrategy allows buying when positions_opened_today < available_day_trades
         # With day_trade_count=2, available_day_trades=1, so can only buy when positions=0
         if positions_count < 1:
             # Should be able to buy
-            asyncio.run(broker._validate_pre_order("TSLA", OrderSide.BUY, Money(amount=Decimal(1000))))
+            asyncio.run(broker._validate_pre_order("META", OrderSide.BUY, Money(amount=Decimal(1000))))
         else:
             # Should not be able to buy
             with pytest.raises(PDTRuleViolationException, match="PDT restrictions prevent opening a new position"):
-                asyncio.run(broker._validate_pre_order("TSLA", OrderSide.BUY, Money(amount=Decimal(1000))))
+                asyncio.run(broker._validate_pre_order("META", OrderSide.BUY, Money(amount=Decimal(1000))))
 
 
 def test_nun_strategy_sell_orders(mock_broker):
@@ -132,26 +146,31 @@ def test_nun_strategy_sell_orders(mock_broker):
     # - Day trade count: 0, 1, 2, 3
     # - Expected behavior:
     #   - If position not opened today: Always allow selling
-    #   - If position opened today: Allow selling if day_trade_count < 3
+    #   - If position opened today: Allow selling
+    #   - If day trade count is 3: We should raise an exception when trying to close a position opened today as the
+    #     NunStrategy does not allow you to open a position if you would not be able to close it same day.
 
     # Test selling position NOT opened today (always allowed regardless of day trade count)
     for day_trade_count in range(4):
         reset_broker_state(broker, day_trade_count)
         # Should always be able to sell positions not opened today
-        asyncio.run(broker._validate_pre_order("AAPL", OrderSide.SELL, Money(amount=Decimal(1000))))
+        asyncio.run(broker._validate_pre_order("NVDA", OrderSide.SELL, Money(amount=Decimal(1000))))
 
     # Test selling position opened today
     for day_trade_count in range(4):
         reset_broker_state(broker, day_trade_count)
-        asyncio.run(broker.set_position_opened_today("AAPL", True))
+        asyncio.run(broker.set_position_opened_today("TSLA", True))
 
         if day_trade_count < 3:
             # Should be able to sell if we have day trades available
-            asyncio.run(broker._validate_pre_order("AAPL", OrderSide.SELL, Money(amount=Decimal(1000))))
+            asyncio.run(broker._validate_pre_order("TSLA", OrderSide.SELL, Money(amount=Decimal(1000))))
         else:
             # Should not be able to sell if no day trades available
-            with pytest.raises(PDTRuleViolationException, match="PDT restrictions prevent closing this position"):
-                asyncio.run(broker._validate_pre_order("AAPL", OrderSide.SELL, Money(amount=Decimal(1000))))
+            with pytest.raises(
+                PDTStrategyException,
+                match="This case should never happen. We should not be able to open a position if we would not be able to close it same day.",
+            ):
+                asyncio.run(broker._validate_pre_order("TSLA", OrderSide.SELL, Money(amount=Decimal(1000))))
 
 
 # ======================================================================
@@ -190,20 +209,18 @@ def test_wiggle_strategy_buy_orders(mock_broker_with_wiggle_strategy):
             # Set the specified number of positions as opened today
             for i in range(positions_count):
                 if i == 0:
-                    asyncio.run(broker.set_position_opened_today("MSFT", True))
+                    asyncio.run(broker.set_position_opened_today("TSLA", True))
                 elif i == 1:
-                    asyncio.run(broker.set_position_opened_today("AAPL", True))
-                elif i == 2:
-                    asyncio.run(broker.set_position_opened_today("GOOG", True))
+                    asyncio.run(broker.set_position_opened_today("NVDA", True))
 
             # Verify position count
-            if positions_count <= 3:  # We only have 3 positions in our test
-                assert asyncio.run(broker._get_positions_opened_today_count()) == positions_count
+            if positions_count <= 2:  # We only have 2 positions in our test
+                assert asyncio.run(broker.get_positions_opened_today_count()) == positions_count
 
             if positions_count < max_positions:
                 # Should be able to buy
-                asyncio.run(broker._validate_pre_order("TSLA", OrderSide.BUY, Money(amount=Decimal(1000))))
-            elif positions_count >= 3:  # Skip tests that would create fake positions beyond our 3
+                asyncio.run(broker._validate_pre_order("META", OrderSide.BUY, Money(amount=Decimal(1000))))
+            elif positions_count >= 2:  # Skip tests that would create fake positions beyond our 2
                 pass
             else:
                 # Should not be able to buy
@@ -223,20 +240,20 @@ def test_wiggle_strategy_sell_orders(mock_broker_with_wiggle_strategy):
     for day_trade_count in range(4):
         reset_broker_state(broker, day_trade_count)
         # Should always be able to sell positions not opened today
-        asyncio.run(broker._validate_pre_order("AAPL", OrderSide.SELL, Money(amount=Decimal(1000))))
+        asyncio.run(broker._validate_pre_order("TSLA", OrderSide.SELL, Money(amount=Decimal(1000))))
 
     # Test selling position opened today
     for day_trade_count in range(4):
         reset_broker_state(broker, day_trade_count)
-        asyncio.run(broker.set_position_opened_today("AAPL", True))
+        asyncio.run(broker.set_position_opened_today("TSLA", True))
 
         if day_trade_count < 3:
             # Should be able to sell if we have day trades available
-            asyncio.run(broker._validate_pre_order("AAPL", OrderSide.SELL, Money(amount=Decimal(1000))))
+            asyncio.run(broker._validate_pre_order("TSLA", OrderSide.SELL, Money(amount=Decimal(1000))))
         else:
             # Should not be able to sell if no day trades available
             with pytest.raises(PDTRuleViolationException, match="PDT restrictions prevent closing this position"):
-                asyncio.run(broker._validate_pre_order("AAPL", OrderSide.SELL, Money(amount=Decimal(1000))))
+                asyncio.run(broker._validate_pre_order("TSLA", OrderSide.SELL, Money(amount=Decimal(1000))))
 
 
 # ======================================================================
@@ -274,16 +291,22 @@ def test_yolo_strategy_sell_orders(mock_broker_with_yolo_strategy):
     for day_trade_count in range(4):
         reset_broker_state(broker, day_trade_count)
         # Should always be able to sell positions not opened today
-        asyncio.run(broker._validate_pre_order("AAPL", OrderSide.SELL, Money(amount=Decimal(1000))))
+        asyncio.run(broker._validate_pre_order("TSLA", OrderSide.SELL, Money(amount=Decimal(1000))))
 
     # Test selling position opened today
     for day_trade_count in range(4):
         reset_broker_state(broker, day_trade_count)
-        asyncio.run(broker.set_position_opened_today("AAPL", True))
+        asyncio.run(broker.set_position_opened_today("TSLA", True))
 
-        # Should never be able to sell same-day positions with YOLO strategy
-        with pytest.raises(PDTRuleViolationException, match="Cannot sell position opened today under YOLO strategy"):
-            asyncio.run(broker._validate_pre_order("AAPL", OrderSide.SELL, Money(amount=Decimal(1000))))
+        # should be able to sell if day trade available
+        if day_trade_count < 3:
+            asyncio.run(broker._validate_pre_order("TSLA", OrderSide.SELL, Money(amount=Decimal(1000))))
+        else:
+            # Should not be able to sell if no day trades available
+            with pytest.raises(
+                PDTRuleViolationException, match="Cannot sell position opened today under YOLO strategy"
+            ):
+                asyncio.run(broker._validate_pre_order("TSLA", OrderSide.SELL, Money(amount=Decimal(1000))))
 
 
 # ======================================================================
@@ -296,49 +319,42 @@ def test_full_order_flow_with_nun_strategy(mock_broker):
     broker = mock_broker
     reset_broker_state(broker, 0)  # Start with 0 day trades
 
-    # Test with the standard positions that exist in the broker: MSFT, AAPL, GOOG
+    # Test with our positions and an additional test position
     # Set positions opened today:
 
-    # First position - MSFT
-    asyncio.run(broker._validate_pre_order("MSFT", OrderSide.BUY, Money(amount=Decimal(500))))
-    asyncio.run(broker.set_position_opened_today("MSFT", True))
+    # First position - TSLA (already exists in broker)
+    asyncio.run(broker._validate_pre_order("TSLA", OrderSide.BUY, Money(amount=Decimal(500))))
+    asyncio.run(broker.set_position_opened_today("TSLA", True))
 
     # Verify position count is 1
-    assert asyncio.run(broker._get_positions_opened_today_count()) == 1
+    assert asyncio.run(broker.get_positions_opened_today_count()) == 1
 
-    # Second position - AAPL
-    asyncio.run(broker._validate_pre_order("AAPL", OrderSide.BUY, Money(amount=Decimal(500))))
-    asyncio.run(broker.set_position_opened_today("AAPL", True))
+    # Second position - NVDA (already exists in broker)
+    asyncio.run(broker._validate_pre_order("NVDA", OrderSide.BUY, Money(amount=Decimal(500))))
+    asyncio.run(broker.set_position_opened_today("NVDA", True))
 
     # Verify position count is 2
-    assert asyncio.run(broker._get_positions_opened_today_count()) == 2
-
-    # Third position - GOOG
-    asyncio.run(broker._validate_pre_order("GOOG", OrderSide.BUY, Money(amount=Decimal(500))))
-    asyncio.run(broker.set_position_opened_today("GOOG", True))
-
-    # Verify position count is 3
-    assert asyncio.run(broker._get_positions_opened_today_count()) == 3
+    assert asyncio.run(broker.get_positions_opened_today_count()) == 2
 
     # Set day trade count to 3 (no day trades left)
     broker._day_trade_count = 3
 
     # Should not be able to buy another position with 3 day trades and 3 positions opened today
     with pytest.raises(PDTRuleViolationException, match="PDT restrictions prevent opening a new position"):
-        asyncio.run(broker._validate_pre_order("MSFT", OrderSide.BUY, Money(amount=Decimal(500))))
+        asyncio.run(broker._validate_pre_order("AAPL", OrderSide.BUY, Money(amount=Decimal(500))))
 
     # Should not be able to sell a position opened today with no day trades left
     with pytest.raises(PDTRuleViolationException, match="PDT restrictions prevent closing this position"):
-        asyncio.run(broker._validate_pre_order("MSFT", OrderSide.SELL, Money(amount=Decimal(500))))
+        asyncio.run(broker._validate_pre_order("TSLA", OrderSide.SELL, Money(amount=Decimal(500))))
 
     # Reset one position to not opened today
-    asyncio.run(broker.set_position_opened_today("AAPL", False))
+    asyncio.run(broker.set_position_opened_today("NVDA", False))
 
     # Verify position count updated correctly
-    assert asyncio.run(broker._get_positions_opened_today_count()) == 2
+    assert asyncio.run(broker.get_positions_opened_today_count()) == 1
 
     # Should be able to sell a position not opened today
-    asyncio.run(broker._validate_pre_order("AAPL", OrderSide.SELL, Money(amount=Decimal(500))))
+    asyncio.run(broker._validate_pre_order("NVDA", OrderSide.SELL, Money(amount=Decimal(500))))
 
 
 def test_full_order_flow_with_wiggle_strategy(mock_broker_with_wiggle_strategy):
@@ -348,29 +364,29 @@ def test_full_order_flow_with_wiggle_strategy(mock_broker_with_wiggle_strategy):
     reset_broker_state(broker, 3)  # Start with 3 day trades used
 
     # Even with 3 day trades used, with wiggle_room=2, we can still open 2 positions
-    # First position - MSFT
-    asyncio.run(broker._validate_pre_order("MSFT", OrderSide.BUY, Money(amount=Decimal(500))))
-    asyncio.run(broker.set_position_opened_today("MSFT", True))
+    # First position - TSLA
+    asyncio.run(broker._validate_pre_order("TSLA", OrderSide.BUY, Money(amount=Decimal(500))))
+    asyncio.run(broker.set_position_opened_today("TSLA", True))
 
     # Verify position count is 1
-    assert asyncio.run(broker._get_positions_opened_today_count()) == 1
+    assert asyncio.run(broker.get_positions_opened_today_count()) == 1
 
-    # Second position - AAPL
-    asyncio.run(broker._validate_pre_order("AAPL", OrderSide.BUY, Money(amount=Decimal(500))))
-    asyncio.run(broker.set_position_opened_today("AAPL", True))
+    # Second position - NVDA
+    asyncio.run(broker._validate_pre_order("NVDA", OrderSide.BUY, Money(amount=Decimal(500))))
+    asyncio.run(broker.set_position_opened_today("NVDA", True))
 
     # Verify position count is 2
-    assert asyncio.run(broker._get_positions_opened_today_count()) == 2
+    assert asyncio.run(broker.get_positions_opened_today_count()) == 2
 
     # With 3 day trades used, we cannot sell a position opened today
     with pytest.raises(PDTRuleViolationException, match="PDT restrictions prevent closing this position"):
-        asyncio.run(broker._validate_pre_order("MSFT", OrderSide.SELL, Money(amount=Decimal(500))))
+        asyncio.run(broker._validate_pre_order("TSLA", OrderSide.SELL, Money(amount=Decimal(500))))
 
-    # Mark GOOG as not opened today
-    asyncio.run(broker.set_position_opened_today("GOOG", False))
+    # Mark NVDA as not opened today
+    asyncio.run(broker.set_position_opened_today("NVDA", False))
 
     # Can sell a position not opened today
-    asyncio.run(broker._validate_pre_order("GOOG", OrderSide.SELL, Money(amount=Decimal(500))))
+    asyncio.run(broker._validate_pre_order("NVDA", OrderSide.SELL, Money(amount=Decimal(500))))
 
 
 def test_full_order_flow_with_yolo_strategy(mock_broker_with_yolo_strategy):
@@ -380,22 +396,33 @@ def test_full_order_flow_with_yolo_strategy(mock_broker_with_yolo_strategy):
 
     # YOLO strategy allows unlimited buying regardless of day trade count
     # Even with 3 day trades used, can open positions with YOLO strategy
-    asyncio.run(broker._validate_pre_order("MSFT", OrderSide.BUY, Money(amount=Decimal(500))))
-    asyncio.run(broker._validate_pre_order("AAPL", OrderSide.BUY, Money(amount=Decimal(500))))
-    asyncio.run(broker._validate_pre_order("GOOG", OrderSide.BUY, Money(amount=Decimal(500))))
+    asyncio.run(broker._validate_pre_order("TSLA", OrderSide.BUY, Money(amount=Decimal(500))))
+    asyncio.run(broker._validate_pre_order("NVDA", OrderSide.BUY, Money(amount=Decimal(500))))
+    asyncio.run(broker._validate_pre_order("AMZN", OrderSide.BUY, Money(amount=Decimal(500))))
 
     # Mark a position as opened today
-    asyncio.run(broker.set_position_opened_today("AAPL", True))
+    asyncio.run(broker.set_position_opened_today("TSLA", True))
 
     # Verify position count
-    assert asyncio.run(broker._get_positions_opened_today_count()) == 1
+    assert asyncio.run(broker.get_positions_opened_today_count()) == 1
 
-    # YOLO strategy never allows selling same-day positions
+    asyncio.run(broker.set_position_opened_today("NVDA", True))
+
+    # Verify position count
+    assert asyncio.run(broker.get_positions_opened_today_count()) == 2
+
+    # YOLO strategy allows selling if day trade available
+    broker._day_trade_count = 2
+    asyncio.run(broker._validate_pre_order("TSLA", OrderSide.SELL, Money(amount=Decimal(500))))
+
+    broker._day_trade_count = 3
     with pytest.raises(PDTRuleViolationException, match="Cannot sell position opened today under YOLO strategy"):
-        asyncio.run(broker._validate_pre_order("AAPL", OrderSide.SELL, Money(amount=Decimal(500))))
+        asyncio.run(broker._validate_pre_order("TSLA", OrderSide.SELL, Money(amount=Decimal(500))))
 
-    # Mark GOOG as not opened today to be sure
-    asyncio.run(broker.set_position_opened_today("GOOG", False))
+    # Mark NVDA as not opened today to be sure
+    asyncio.run(broker.set_position_opened_today("NVDA", False))
+
+    assert asyncio.run(broker.get_positions_opened_today_count()) == 1
 
     # But can sell a position not opened today
-    asyncio.run(broker._validate_pre_order("GOOG", OrderSide.SELL, Money(amount=Decimal(500))))
+    asyncio.run(broker._validate_pre_order("NVDA", OrderSide.SELL, Money(amount=Decimal(500))))

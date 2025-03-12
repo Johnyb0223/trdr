@@ -1,14 +1,6 @@
 from pydantic import BaseModel, model_validator
 
-import random
-from datetime import timedelta
-from typing import List, Optional
-from decimal import Decimal
-from opentelemetry import trace
-from pydantic import Field
-
-
-from ..shared.models import TradingDateTime, Money, Timeframe
+from ..shared.models import TradingDateTime, Money
 from .exceptions import BarValidationException
 
 

@@ -1,12 +1,15 @@
 from opentelemetry import trace
 from decimal import Decimal
+from typing import List
+
 from ..base_broker import BaseBroker
-from ..models import Position, OrderSide, PositionSide
+from ..models import Order, Position, OrderStatus, OrderSide
 from ...shared.models import Money
+from ....test_utils.position_generator import PositionGenerator, PositionCriteria
+from ...shared.models import TradingDateTime
 
 
 class MockBroker(BaseBroker):
-    """A mock broker implementation returning dummy data for testing purposes."""
 
     def __init__(
         self,
@@ -18,57 +21,75 @@ class MockBroker(BaseBroker):
 
     async def _initialize(self):
         with self._tracer.start_as_current_span("mock_broker._initialize") as span:
-            # Initialize tracking for positions opened today
-            self._positions_opened_today = {}
+            self._pending_orders: List[Order] = []
+            self._cash = Money(amount=Decimal(100000))
+            positions = PositionGenerator(criteria=PositionCriteria(count=3)).generate_positions()
+            self._positions: List[Position] = positions
+            self._snapshot_of_positions: List[Position] = self._positions
+            self._snapshot_of_cash = self._cash
+            self._time_stamp = TradingDateTime.now()
             span.set_status(trace.StatusCode.OK)
             return
 
-    async def _refresh(self) -> None:
-        with self._tracer.start_as_current_span("mock_broker._refresh") as span:
-            self._cash = Money(amount=Decimal(10000))
+    async def _refresh_positions(self):
+        with self._tracer.start_as_current_span("mock_broker._refresh_positions") as span:
+            self._positions = self._snapshot_of_positions
 
-            # Create default positions
-            position_aapl = Position(
-                symbol="AAPL",
-                quantity=Decimal(10),
-                average_cost=Money(amount=Decimal(100)),
-                side=PositionSide.LONG,
-            )
+            for order in self._pending_orders:
+                order.status = OrderStatus.FILLED
+                order.filled_at = TradingDateTime.now()
+                for position in self._positions:
+                    if order.symbol == position.symbol:
+                        position.orders.append(order)
+                        span.add_event(f"Added order to position {position.symbol}")
+                        break
+                else:
+                    position = Position(symbol=order.symbol, orders=[order])
+                    self._positions.append(position)
+                    span.add_event(f"Created new position {position.symbol}")
+                    self._snapshot_of_positions.append(position)
 
-            position_msft = Position(
-                symbol="MSFT",
-                quantity=Decimal(5),
-                average_cost=Money(amount=Decimal(200)),
-                side=PositionSide.LONG,
-            )
-
-            position_goog = Position(
-                symbol="GOOG",
-                quantity=Decimal(2),
-                average_cost=Money(amount=Decimal(500)),
-                side=PositionSide.LONG,
-            )
-
-            # Store positions
-            self._positions = {
-                position_aapl.symbol: position_aapl,
-                position_msft.symbol: position_msft,
-                position_goog.symbol: position_goog,
-            }
-
-            # Mark one position as opened today for testing
-            if not hasattr(self, "_positions_opened_today"):
-                self._positions_opened_today = {}
-            self._positions_opened_today["MSFT"] = True
-
-            self._equity = Money(amount=Decimal(15000))
-            self._day_trade_count = 0
+            self._pending_orders = []
+            self._snapshot_of_positions = self._positions
             span.set_status(trace.StatusCode.OK)
 
-    async def _place_order(self, symbol: str, side: OrderSide, dollar_amount: Money) -> None:
-        with self._tracer.start_as_current_span("mock_broker._execute_order") as span:
+    async def _refresh_cash(self):
+        with self._tracer.start_as_current_span("mock_broker._refresh_cash") as span:
+            self._cash = self._snapshot_of_cash
+            new_orders = []
+            for position in self._positions:
+                new_orders.extend(position.get_orders_created_after_dt(self._time_stamp))
+
+            for order in new_orders:
+                if order.side == OrderSide.BUY:
+                    if order.status in [OrderStatus.FILLED, OrderStatus.PARTIALLY_FILLED]:
+                        self._cash -= order.amount
+                else:
+                    if order.status in [OrderStatus.FILLED, OrderStatus.PARTIALLY_FILLED]:
+                        self._cash += order.amount
+
+            self._snapshot_of_cash = self._cash
+            self._time_stamp = TradingDateTime.now()
+
+            span.set_status(trace.StatusCode.OK)
+
+    async def _refresh_equity(self):
+        with self._tracer.start_as_current_span("mock_broker._refresh_equity") as span:
+            self._equity = self._cash + sum(position.get_market_value() for position in self._positions)
+            span.set_status(trace.StatusCode.OK)
+
+    async def _refresh_day_trade_count(self):
+        self._day_trade_count = 1
+
+    async def _place_order(self, order: Order) -> None:
+        with self._tracer.start_as_current_span("mock_broker._place_order") as span:
             try:
-                pass
+                if not hasattr(self, "_pending_orders"):
+                    self._pending_orders = []
+
+                self._pending_orders.append(order)
+
+                span.add_event(f"Added pending order: {order.side.value} {order.amount.amount} of {order.symbol}")
             except Exception as e:
                 span.record_exception(e)
                 span.set_status(trace.StatusCode.ERROR)
@@ -78,53 +99,13 @@ class MockBroker(BaseBroker):
 
     async def _cancel_all_orders(self) -> None:
         with self._tracer.start_as_current_span("mock_broker._cancel_all_orders") as span:
-            span.set_status(trace.StatusCode.OK)
             try:
-                pass
+                if hasattr(self, "_pending_orders"):
+                    self._pending_orders = []
+                    span.add_event("Cleared all pending orders")
             except Exception as e:
                 span.record_exception(e)
                 span.set_status(trace.StatusCode.ERROR)
                 raise
             else:
                 span.set_status(trace.StatusCode.OK)
-
-    async def _position_opened_today(self, symbol: str) -> bool:
-        """
-        Determine if a position was opened today.
-
-        For the mock broker, this is configurable to simulate different scenarios.
-        By default, positions are considered NOT opened today.
-
-        Args:
-            symbol: The ticker symbol to check
-
-        Returns:
-            bool: True if the position was opened today, False otherwise
-        """
-        with self._tracer.start_as_current_span("mock_broker._position_opened_today") as span:
-            # For mock broker, we can track this with a set of positions opened today
-            # Default implementation assumes no positions were opened today
-            span.set_status(trace.StatusCode.OK)
-            return getattr(self, "_positions_opened_today", {}).get(symbol, False)
-
-    async def set_position_opened_today(self, symbol: str, opened_today: bool = True) -> None:
-        """
-        Mark a position as opened today for testing purposes.
-
-        This method allows test code to simulate positions being opened today
-        to test PDT rule enforcement.
-
-        Args:
-            symbol: The ticker symbol to mark
-            opened_today: Whether to mark the position as opened today (True) or not (False)
-        """
-        with self._tracer.start_as_current_span("mock_broker.set_position_opened_today") as span:
-            if not hasattr(self, "_positions_opened_today"):
-                self._positions_opened_today = {}
-
-            if opened_today:
-                self._positions_opened_today[symbol] = True
-            elif symbol in self._positions_opened_today:
-                del self._positions_opened_today[symbol]
-
-            span.set_status(trace.StatusCode.OK)
