@@ -76,14 +76,6 @@ def test_nun_strategy_evaluate_existing_position(create_order, long_dummy_positi
     decision = strategy.evaluate_order(context)
     assert decision.allowed is False
 
-    # Test case: closing existing long position (always allowed)
-    sell_order = create_order(long_dummy_position.symbol, side=OrderSide.SELL)
-    context = PDTContext(
-        position=long_dummy_position, order=sell_order, count_of_positions_opened_today=2, rolling_day_trade_count=3
-    )
-    decision = strategy.evaluate_order(context)
-    assert decision.allowed is True
-
     # Test case: Add to existing short position with sufficient day trades
     sell_order = create_order(short_dummy_position.symbol, side=OrderSide.SELL)
     context = PDTContext(
@@ -101,34 +93,94 @@ def test_nun_strategy_evaluate_existing_position(create_order, long_dummy_positi
 
 
 # Test WiggleStrategy with the new evaluate_order method
-def test_wiggle_strategy_evaluate_buy_orders(create_order):
-    """Test WiggleStrategy evaluating BUY orders with different contexts."""
+def test_wiggle_strategy_evaluate_new_position(create_order):
+    """Test WiggleStrategy evaluating new position orders with different contexts."""
     strategy = WiggleStrategy.create()
     strategy.wiggle_room = 2
 
-    # Test case: well within wiggle room limits
+    # Test case: well within wiggle room limits (1 used day trade, can open 4 positions)
     order = create_order("AAPL", side=OrderSide.BUY)
-    context = PDTContext(position=None, order=order, count_of_positions_opened_today=1, rolling_day_trade_count=1)
+    context = PDTContext(position=None, order=order, count_of_positions_opened_today=0, rolling_day_trade_count=1)
     decision = strategy.evaluate_order(context)
     assert decision.allowed is True
 
-    # Test case: at wiggle room limit
-    context = PDTContext(position=None, order=order, count_of_positions_opened_today=3, rolling_day_trade_count=1)
+    # Test case: at wiggle room limit (1 used day trade, max 4 positions)
+    context = PDTContext(position=None, order=order, count_of_positions_opened_today=4, rolling_day_trade_count=0)
     decision = strategy.evaluate_order(context)
     assert decision.allowed is True
 
     # Test case: exceeds wiggle room
-    context = PDTContext(position=None, order=order, count_of_positions_opened_today=4, rolling_day_trade_count=1)
+    context = PDTContext(position=None, order=order, count_of_positions_opened_today=5, rolling_day_trade_count=1)
+    decision = strategy.evaluate_order(context)
+    assert decision.allowed is False
+
+    # Test case: 0 day trades used - can open more positions
+    context = PDTContext(position=None, order=order, count_of_positions_opened_today=4, rolling_day_trade_count=0)
+    decision = strategy.evaluate_order(context)
+    assert decision.allowed is True
+
+    # Test case: all day trades used - can only open wiggle_room positions
+    context = PDTContext(position=None, order=order, count_of_positions_opened_today=1, rolling_day_trade_count=3)
+    decision = strategy.evaluate_order(context)
+    assert decision.allowed is True
+
+    # Test case: all day trades used, at wiggle room limit
+    context = PDTContext(position=None, order=order, count_of_positions_opened_today=2, rolling_day_trade_count=3)
+    decision = strategy.evaluate_order(context)
+    assert decision.allowed is False
+
+
+def test_wiggle_strategy_evaluate_existing_position(create_order, long_dummy_position, short_dummy_position):
+    """Test WiggleStrategy evaluating orders for existing positions."""
+    strategy = WiggleStrategy.create()
+    strategy.wiggle_room = 2
+
+    # Test case: closing long position with day trades available
+    sell_order = create_order(long_dummy_position.symbol, side=OrderSide.SELL)
+    context = PDTContext(
+        position=long_dummy_position, order=sell_order, count_of_positions_opened_today=1, rolling_day_trade_count=2
+    )
+    decision = strategy.evaluate_order(context)
+    assert decision.allowed is True
+
+    # Test case: closing long position with no day trades available
+    context = PDTContext(
+        position=long_dummy_position, order=sell_order, count_of_positions_opened_today=1, rolling_day_trade_count=3
+    )
+    decision = strategy.evaluate_order(context)
+    assert decision.allowed is False
+
+    # Test case: adding to existing long position (treated as new position)
+    buy_order = create_order(long_dummy_position.symbol, side=OrderSide.BUY)
+    context = PDTContext(
+        position=long_dummy_position, order=buy_order, count_of_positions_opened_today=4, rolling_day_trade_count=1
+    )
+    decision = strategy.evaluate_order(context)
+    assert decision.allowed is False
+
+    # Test case: closing short position with day trades available
+    buy_order = create_order(short_dummy_position.symbol, side=OrderSide.BUY)
+    context = PDTContext(
+        position=short_dummy_position, order=buy_order, count_of_positions_opened_today=1, rolling_day_trade_count=2
+    )
+    decision = strategy.evaluate_order(context)
+    assert decision.allowed is True
+
+    # Test case: closing short position with no day trades available
+    buy_order = create_order(short_dummy_position.symbol, side=OrderSide.BUY)
+    context = PDTContext(
+        position=short_dummy_position, order=buy_order, count_of_positions_opened_today=1, rolling_day_trade_count=3
+    )
     decision = strategy.evaluate_order(context)
     assert decision.allowed is False
 
 
 # Test YoloStrategy with the new evaluate_order method
-def test_yolo_strategy_evaluate_orders(create_order, long_dummy_position):
-    """Test YoloStrategy evaluating orders with different contexts."""
+def test_yolo_strategy_evaluate_new_position(create_order):
+    """Test YoloStrategy evaluating new position orders."""
     strategy = YoloStrategy.create()
 
-    # Test case: buy order (always allowed)
+    # Test case: new buy order with many positions open and all day trades used
     buy_order = create_order("AAPL", side=OrderSide.BUY)
     context = PDTContext(
         position=None,
@@ -138,39 +190,58 @@ def test_yolo_strategy_evaluate_orders(create_order, long_dummy_position):
     )
     decision = strategy.evaluate_order(context)
     assert decision.allowed is True
+    assert "YOLO strategy permits unlimited buys" in decision.reason
 
-    # Test case: sell of position NOT opened today
-    # We'll need to modify the context with appropriate position data
+    # Test case: adding to existing long position (treated as opening a new position)
+    context = PDTContext(
+        position=None,  # Here we simulate the position being None for the YOLO check
+        order=buy_order,
+        count_of_positions_opened_today=20,  # Very high number of positions
+        rolling_day_trade_count=3,  # All day trades used
+    )
+    decision = strategy.evaluate_order(context)
+    assert decision.allowed is True
+    assert "YOLO strategy permits unlimited buys" in decision.reason
+
+
+def test_yolo_strategy_evaluate_existing_position(create_order, long_dummy_position, short_dummy_position):
+    """Test YoloStrategy evaluating orders for existing positions."""
+    strategy = YoloStrategy.create()
+
+    # Test case: closing long position with day trades available
     sell_order = create_order(long_dummy_position.symbol, side=OrderSide.SELL)
-
-    # For testing selling a position not opened today, we'd need to setup the position properly
-    # This would typically involve creating a position with orders from a previous day
-    # For now, we'll test it assuming the YOLO strategy's implementation doesn't require this detail
     context = PDTContext(
-        position=long_dummy_position, order=sell_order, count_of_positions_opened_today=0, rolling_day_trade_count=3
+        position=long_dummy_position, order=sell_order, count_of_positions_opened_today=1, rolling_day_trade_count=2
     )
     decision = strategy.evaluate_order(context)
     assert decision.allowed is True
+    assert "YOLO strategy permits unlimited sells" in decision.reason
 
-    # Test case: sell of position opened today with day trades available
+    # Test case: closing long position with no day trades available
     context = PDTContext(
         position=long_dummy_position,
         order=sell_order,
-        count_of_positions_opened_today=1,  # Position opened today
-        rolling_day_trade_count=0,  # Day trades available
-    )
-    decision = strategy.evaluate_order(context)
-    assert decision.allowed is True
-
-    # Test case: sell of position opened today with no day trades available
-    # This would depend on the YOLO strategy's implementation for checking day trades
-    context = PDTContext(
-        position=long_dummy_position,
-        order=sell_order,
-        count_of_positions_opened_today=1,  # Position opened today
+        count_of_positions_opened_today=1,
         rolling_day_trade_count=3,  # No day trades available
     )
     decision = strategy.evaluate_order(context)
-    # Check if YOLO strategy allows or disallows this based on implementation
-    # The original test expected this to be False
+    assert decision.allowed is False
+    assert "YOLO strategy prevents same-day closes" in decision.reason
+
+    # Test case: closing short position with day trades available
+    buy_order = create_order(short_dummy_position.symbol, side=OrderSide.BUY)
+    context = PDTContext(
+        position=short_dummy_position, order=buy_order, count_of_positions_opened_today=1, rolling_day_trade_count=2
+    )
+    decision = strategy.evaluate_order(context)
+    assert decision.allowed is True
+
+    # Test case: closing short position with no day trades available
+    context = PDTContext(
+        position=short_dummy_position,
+        order=buy_order,
+        count_of_positions_opened_today=1,
+        rolling_day_trade_count=3,  # No day trades available
+    )
+    decision = strategy.evaluate_order(context)
     assert decision.allowed is False

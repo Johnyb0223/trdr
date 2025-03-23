@@ -36,7 +36,12 @@ class Money(BaseModel):
         """
         if self.currency != other.currency:
             raise ValueError(f"Cannot add different currencies: {self.currency} and {other.currency}")
-        return Money(self.amount + other.amount, self.currency)
+        return Money(amount=self.amount + other.amount, currency=self.currency)
+
+    def __sub__(self, other: "Money") -> "Money":
+        if self.currency != other.currency:
+            raise ValueError(f"Cannot subtract different currencies: {self.currency} and {other.currency}")
+        return Money(amount=self.amount - other.amount, currency=self.currency)
 
     def __str__(self) -> str:
         return f"{self.currency} {self.amount:.2f}"
@@ -47,94 +52,43 @@ class Money(BaseModel):
         return round(self.amount, 2) == round(other.amount, 2) and self.currency == other.currency
 
 
-@dataclass(frozen=True)
-class TradingDateTime:
-    """Value object representing a point in market time.
-
-    Attributes:
-        trading_date (date): The trading day date
-        timestamp (datetime): The exact timestamp
-
-    Methods:
-        from_daily_close: Create from trading date, setting time to end of day
-        from_utc: Create from UTC timestamp
-        now: Create from current UTC time
-    """
+class TradingDateTime(BaseModel):
+    """Value object representing a point in market time."""
 
     trading_date: date
     timestamp: datetime
 
     @property
     def is_weekend(self) -> bool:
-        """Check if the trading date is a weekend."""
         return self.trading_date.weekday() in [5, 6]
 
     @classmethod
-    def from_daily_close(cls, trading_date: date) -> "TradingDateTime":
-        """Create from just a trading date - timestamp is the last second of the day.
+    def start_of_current_day(cls) -> "TradingDateTime":
+        return cls(trading_date=date.today(), timestamp=datetime.combine(date.today(), time.min, tzinfo=timezone.utc))
 
-        Args:
-            trading_date: The trading day date
-
-        Returns:
-            TradingDateTime set to end of provided date
-
-        Raises:
-            TradingDateException: If not a weekday
-        """
-        return cls(trading_date, datetime.combine(trading_date, time(23, 59, 59, 999999)))
+    @classmethod
+    def end_of_current_day(cls) -> "TradingDateTime":
+        return cls(trading_date=date.today(), timestamp=datetime.combine(date.today(), time.max, tzinfo=timezone.utc))
 
     @classmethod
     def from_utc(cls, timestamp: datetime) -> "TradingDateTime":
-        """Create from a UTC timestamp.
-
-        Args:
-            timestamp: UTC datetime
-
-        Returns:
-            TradingDateTime for the timestamp
-
-        Raises:
-            TradingDateException: If timestamp not UTC or not weekday
-        """
         if timestamp.tzinfo != timezone.utc:
             raise TradingDateException("Timestamp must be UTC")
-        return cls(timestamp.date(), timestamp)
+        return cls(trading_date=timestamp.date(), timestamp=timestamp)
 
     @classmethod
     def now(cls) -> "TradingDateTime":
-        """Create from current UTC time.
-
-        Returns:
-            TradingDateTime for current time
-        """
-        return cls(datetime.now(tz=timezone.utc).date(), datetime.now(tz=timezone.utc))
+        now = datetime.now(tz=timezone.utc)
+        return cls(trading_date=now.date(), timestamp=now)
 
     def __str__(self) -> str:
         return f"[{self.trading_date} {self.timestamp.strftime('%H:%M:%S')} UTC]"
 
-    def __repr__(self) -> str:
-        return self.__str__()
-
     def __add__(self, delta: timedelta) -> "TradingDateTime":
-        """
-        Add a timedelta to this TradingDateTime.
-
-        Args:
-            delta (timedelta): The time difference to add
-
-        Returns:
-            TradingDateTime: New instance with updated timestamp and trading_date
-
-        Raises:
-            TradingDateException: If the resulting trading date is not a weekday
-        """
         if not isinstance(delta, timedelta):
             raise NotImplementedError("Cannot add non-timedelta to TradingDateTime")
-
         new_timestamp = self.timestamp + delta
-
-        return TradingDateTime(new_timestamp.date(), new_timestamp)
+        return TradingDateTime(trading_date=new_timestamp.date(), timestamp=new_timestamp)
 
     def __radd__(self, delta: timedelta) -> "TradingDateTime":
         return self.__add__(delta)

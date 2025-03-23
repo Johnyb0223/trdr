@@ -64,8 +64,7 @@ class NunStrategy(BasePDTStrategy):
                     reason="PDT restrictions prevent opening a new position: insufficient day trades available",
                 )
             return PDTDecision(allowed=True, reason="Order allowed: sufficient day trades available")
-
-        if context.position is not None:
+        else:
             # if we are adding to a current position, we need to check if we can open a new position
             if (context.position.side == PositionSide.LONG and context.order.side == OrderSide.BUY) or (
                 context.position.side == PositionSide.SHORT and context.order.side == OrderSide.SELL
@@ -76,13 +75,12 @@ class NunStrategy(BasePDTStrategy):
                         reason="PDT restrictions prevent opening a new position: insufficient day trades available",
                     )
                 return PDTDecision(allowed=True, reason="Order allowed: sufficient day trades available")
-            else:
-                """
-                we can always close a position as we would not be able to open a new position if we didn't have enough day trades available to close it
-                """
-                return PDTDecision(
-                    allowed=True,
-                    reason="PDT restrictions prevent opening a new position: order side does not match position side",
+            elif (rolling_day_trade_count >= 3) and (
+                (context.position.side == PositionSide.LONG and context.order.side == OrderSide.SELL)
+                or (context.position.side == PositionSide.SHORT and context.order.side == OrderSide.BUY)
+            ):
+                raise PDTStrategyException(
+                    f"We are trying to close a position with a current day trade count of 3. We should never reach this point as we should not have been able to open a new position in the first place. The NunStrategy should have prevented this from happening."
                 )
-
-        raise PDTStrategyException(f"We did not handle this case: {context}")
+            else:
+                return PDTDecision(allowed=True, reason="Order allowed: sufficient day trades available")

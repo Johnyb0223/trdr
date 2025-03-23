@@ -1,6 +1,6 @@
 from .base_pdt_strategy import BasePDTStrategy
 from .models import PDTContext, PDTDecision
-from ..models import OrderSide
+from ..models import OrderSide, PositionSide
 
 
 class YoloStrategy(BasePDTStrategy):
@@ -32,19 +32,15 @@ class YoloStrategy(BasePDTStrategy):
         Returns:
             PDTDecision with the evaluation result
         """
-        if context.side == OrderSide.BUY:
-            # Always allow buying
+        rolling_day_trade_count = context.rolling_day_trade_count
+        if (
+            context.position is None
+            or (context.position.side == PositionSide.LONG and context.order.side == OrderSide.BUY)
+            or (context.position.side == PositionSide.SHORT and context.order.side == OrderSide.SELL)
+        ):
             return PDTDecision(allowed=True, reason="Order allowed: YOLO strategy permits unlimited buys")
-        elif context.side == OrderSide.SELL:
-            if not context.position_opened_today:
-                # Only allow selling if position wasn't opened today
-                return PDTDecision(allowed=True, reason="Order allowed: position not opened today")
+        else:
+            if rolling_day_trade_count < 3:
+                return PDTDecision(allowed=True, reason="Order allowed: YOLO strategy permits unlimited sells")
             else:
-                # Sell if we have day trades available
-                if context.rolling_day_trade_count < 3:
-                    return PDTDecision(allowed=True, reason="Order allowed: position opened today")
-                else:
-                    return PDTDecision(allowed=False, reason="Cannot sell position opened today under YOLO strategy")
-
-        # Fallback for any other order types
-        return PDTDecision(allowed=False, reason="Unknown order type")
+                return PDTDecision(allowed=False, reason="Order not allowed: YOLO strategy prevents same-day closes")

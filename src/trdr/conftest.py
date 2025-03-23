@@ -3,6 +3,7 @@ import pytest
 import yfinance as yf
 import random
 import datetime
+
 from .core.security_provider.security_provider import SecurityProvider
 from .core.bar_provider.yf_bar_provider.yf_bar_provider import YFBarProvider
 from .test_utils.fake_yf_download import fake_yf_download
@@ -104,7 +105,7 @@ def dummy_positions():
 @pytest.fixture(scope="function")
 def mock_broker_with_nun_strategy():
     nun_strategy = NunStrategy.create()
-    broker = asyncio.run(MockBroker.create(nun_strategy=nun_strategy))
+    broker = asyncio.run(MockBroker.create(pdt_strategy=nun_strategy))
     yield broker
     asyncio.run(broker._session.close())
 
@@ -138,3 +139,10 @@ def create_order():
         return OrderGenerator(criteria=OrderCriteria(count=1, symbol=symbol, side=side)).generate_orders()[0]
 
     return _create_order
+
+
+@pytest.fixture(scope="function")
+def prepared_trading_context(mock_trading_context: TradingContext):
+    """Prepare trading context with a valid symbol and security."""
+    asyncio.run(mock_trading_context.next_symbol())
+    return mock_trading_context

@@ -151,7 +151,8 @@ def test_size_all_sell_orders():
 
     position = Position(symbol="AAPL", orders=[order1, order2])
 
-    assert position.size == Decimal("-15")  # -10 + (-5)
+    assert position.size == Decimal("15")  # 10 + 5
+    assert position.side == PositionSide.SHORT
 
 
 def test_size_mixed_buy_sell_orders():
@@ -434,6 +435,7 @@ def test_position_with_only_pending_orders():
         type=OrderType.MARKET,
         side=OrderSide.BUY,
         status=OrderStatus.PENDING,
+        current_price=Money(amount=Decimal("100")),
         created_at=TradingDateTime.from_utc(now),
         filled_at=None,
     )
@@ -445,6 +447,7 @@ def test_position_with_only_pending_orders():
         type=OrderType.MARKET,
         side=OrderSide.BUY,
         status=OrderStatus.PENDING,
+        current_price=Money(amount=Decimal("100")),
         created_at=TradingDateTime.from_utc(now),
         filled_at=None,
     )
@@ -480,7 +483,7 @@ def test_position_with_rejected_cancelled_orders():
         avg_fill_price=None,
         type=OrderType.MARKET,
         side=OrderSide.BUY,
-        status=OrderStatus.CANCELLED,
+        status=OrderStatus.CANCELED,
         created_at=TradingDateTime.from_utc(now),
         filled_at=None,
     )

@@ -73,7 +73,7 @@ class YFBarProvider(BaseBarProvider):
                 for symbol in symbols_with_data:
                     try:
                         symbol_data = data.xs(symbol, level=0, axis=1)
-                        bars = self._convert_df_to_bars(symbol_data)
+                        bars = self._convert_df_to_bars(symbol, symbol_data)
                         self._data_cache[symbol] = bars
                     except BarConversionException as e:
                         continue
@@ -153,7 +153,7 @@ class YFBarProvider(BaseBarProvider):
 
             return symbols, data
 
-    def _convert_df_to_bars(self, df: pd.DataFrame) -> List[Bar]:
+    def _convert_df_to_bars(self, symbol: str, df: pd.DataFrame) -> List[Bar]:
         """
         Convert a DataFrame to a list of Bar objects.
 
@@ -164,6 +164,7 @@ class YFBarProvider(BaseBarProvider):
             List[Bar]: List of Bar objects.
         """
         with self._tracer.start_as_current_span("YFBarProvider._convert_df_to_bars") as span:
+            span.set_attribute("symbol", symbol)
 
             bars = []
             total_rows = len(df)
@@ -239,7 +240,7 @@ class YFBarProvider(BaseBarProvider):
 
             try:
                 symbol_data = data.xs(symbol, level=0, axis=1)
-                bars = self._convert_df_to_bars(symbol_data)
+                bars = self._convert_df_to_bars(symbol, symbol_data)
                 most_recent_bar = bars[-1]
                 most_recent_bar.trading_datetime = TradingDateTime.now()
             except Exception as e:
@@ -270,7 +271,8 @@ class YFBarProvider(BaseBarProvider):
         """
         with self._tracer.start_as_current_span("YFBarProvider.get_bars") as span:
             span.set_attribute("symbol", symbol)
-            span.set_attribute("requested_lookback", lookback)
+            if lookback is not None:
+                span.set_attribute("requested_lookback", lookback)
             if not self._data_cache.get(symbol, None):
                 span.add_event("no_data_found_for_symbol")
                 span.set_status(trace.Status(trace.StatusCode.ERROR))

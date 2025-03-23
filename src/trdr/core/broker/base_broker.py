@@ -7,6 +7,7 @@ from decimal import Decimal
 from datetime import timedelta
 
 from .models import Order, Position
+from ..bar_provider.models import Bar
 from ..shared.models import Money, TradingDateTime
 from .pdt.base_pdt_strategy import BasePDTStrategy
 from .pdt.models import PDTContext
@@ -104,13 +105,6 @@ class BaseBroker(ABC):
         pass
 
     @abstractmethod
-    async def _refresh(self):
-        await self._refresh_positions()
-        await self._refresh_cash()
-        await self._refresh_equity()
-        await self._refresh_day_trade_count()
-
-    @abstractmethod
     async def _refresh_positions(self):
         """
         Refresh the positions from the broker.
@@ -152,6 +146,14 @@ class BaseBroker(ABC):
         """
         pass
 
+    async def _refresh(self):
+        with self._tracer.start_as_current_span("BaseBroker._refresh") as span:
+            await self._refresh_positions()
+            await self._refresh_cash()
+            await self._refresh_equity()
+            await self._refresh_day_trade_count()
+            span.set_status(trace.StatusCode.OK)
+
     async def get_available_cash(self) -> Money:
         with self._tracer.start_as_current_span("BaseBroker.get_cash") as span:
             await self._stale_handler()
@@ -189,8 +191,7 @@ class BaseBroker(ABC):
                 span.set_attribute("account_exposure", "0")
                 return Decimal(0)
             exposure = (
-                sum([position.size() * position.average_cost().amount for position in self._positions.values()])
-                / self._equity.amount
+                sum([position.get_market_value.amount for position in self._positions.values()]) / self._equity.amount
             )
             span.set_attribute("account_exposure", str(exposure))
             span.set_status(trace.StatusCode.OK)
@@ -214,9 +215,11 @@ class BaseBroker(ABC):
     async def get_count_of_positions_opened_today(self) -> int:
         with self._tracer.start_as_current_span("BaseBroker.get_count_of_positions_opened_today") as span:
             await self._stale_handler()
+            start_of_day = TradingDateTime.start_of_current_day()
             count = 0
-            for symbol in self._positions:
-                if await self._position_opened_today(symbol):
+            for _, position in self._positions.items():
+                orders = position.get_orders_created_after_dt(start_of_day)
+                if len(orders) > 0:
                     count += 1
             span.set_status(trace.StatusCode.OK)
             span.set_attribute("positions_opened_today_count", str(count))
@@ -237,7 +240,7 @@ class BaseBroker(ABC):
             span.set_status(trace.StatusCode.OK)
             span.add_event(
                 "Order opened successfully: symbol={}, side={}, quantity={}".format(
-                    order.symbol, order.side, order.quantity
+                    order.symbol, order.side, order.quantity_filled
                 )
             )
 
@@ -264,22 +267,37 @@ class BaseBroker(ABC):
             Exception: For other validation failures
         """
         # Create PDT context with all relevant information
-        context = PDTContext(
-            order=order,
-            position=self._positions.get(order.symbol, None),
-            rolling_day_trade_count=self._day_trade_count,
-            count_of_positions_opened_today=await self.get_count_of_positions_opened_today(),
-        )
 
-        # Let the strategy evaluate the context
-        decision = self._pdt_strategy.evaluate_order(context)
+        """
+        we dont need to check pdt rules if cash is over 25k. However, if this trade puts us below 25k, we need to check pdt rules.
+        """
+        with self._tracer.start_as_current_span("BaseBroker._validate_pre_order") as span:
+            if not (self._cash.amount - order.quantity_requested * order.current_price.amount) < 25000:
+                span.add_event("cash is over 25k, skipping pdt rules")
+                span.set_status(trace.StatusCode.OK)
+                return
+            span.add_event(
+                "checking pdt rules. cash after order: {}".format(
+                    self._cash.amount - order.quantity_requested * order.current_price.amount
+                )
+            )
+            count_of_positions_opened_today = await self.get_count_of_positions_opened_today()
+            context = PDTContext(
+                order=order,
+                position=self._positions.get(order.symbol, None),
+                rolling_day_trade_count=self._day_trade_count,
+                count_of_positions_opened_today=count_of_positions_opened_today,
+            )
 
-        # Process the decision
-        if not decision.allowed:
-            reason = decision.reason or "PDT restrictions prevent this order"
-            raise PDTRuleViolationException(reason)
+            # Let the strategy evaluate the context
+            decision = self._pdt_strategy.evaluate_order(context)
 
-        # Additional common verifications can be incorporated here
+            # Process the decision
+            if not decision.allowed:
+                reason = decision.reason or "PDT restrictions prevent this order"
+                raise PDTRuleViolationException(reason)
+
+            # Additional common verifications can be incorporated here
 
     def _clear_current_state(self) -> None:
         with self._tracer.start_as_current_span("BaseBroker._clear_current_state") as span:

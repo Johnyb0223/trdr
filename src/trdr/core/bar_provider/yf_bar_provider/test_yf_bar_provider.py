@@ -49,7 +49,7 @@ def test_get_bars_throws_exception_when_lookback_is_greater_than_the_number_of_b
     yf_bar_provider_with_fake_data,
 ):
     with pytest.raises(InsufficientBarsException):
-        bars = asyncio.run(yf_bar_provider_with_fake_data.get_bars("AAPL", 4))
+        bars = asyncio.run(yf_bar_provider_with_fake_data.get_bars("AAPL", 7))
 
 
 def test_get_current_bar_throws_exception_when_no_bars_are_available_for_a_symbol(monkeypatch):

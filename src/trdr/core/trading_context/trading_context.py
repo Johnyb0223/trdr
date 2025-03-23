@@ -185,7 +185,7 @@ class TradingContext:
                     moving_average = self.current_security.compute_moving_average(Timeframe.d5)
                     if moving_average is None:
                         error = MissingContextValue(f"Moving average for {self.current_symbol} is not available")
-                        span.add_event(error.message)
+                        span.add_event(str(error))
                         raise error
                     return moving_average.amount
 
@@ -193,7 +193,6 @@ class TradingContext:
                     moving_average = self.current_security.compute_moving_average(Timeframe.d20)
                     if moving_average is None:
                         error = MissingContextValue(f"Moving average for {self.current_symbol} is not available")
-                        span.add_event(error.message)
                         raise error
                     return moving_average.amount
 
@@ -201,7 +200,7 @@ class TradingContext:
                     moving_average = self.current_security.compute_moving_average(Timeframe.d50)
                     if moving_average is None:
                         error = MissingContextValue(f"Moving average for {self.current_symbol} is not available")
-                        span.add_event(error.message)
+                        span.add_event(str(error))
                         raise error
                     return moving_average.amount
 
@@ -209,7 +208,7 @@ class TradingContext:
                     moving_average = self.current_security.compute_moving_average(Timeframe.d100)
                     if moving_average is None:
                         error = MissingContextValue(f"Moving average for {self.current_symbol} is not available")
-                        span.add_event(error.message)
+                        span.add_event(str(error))
                         raise error
                     return moving_average.amount
 
@@ -217,7 +216,7 @@ class TradingContext:
                     moving_average = self.current_security.compute_moving_average(Timeframe.d200)
                     if moving_average is None:
                         error = MissingContextValue(f"Moving average for {self.current_symbol} is not available")
-                        span.add_event(error.message)
+                        span.add_event(str(error))
                         raise error
                     return moving_average.amount
 
@@ -225,7 +224,7 @@ class TradingContext:
                     average_volume = self.current_security.compute_average_volume(Timeframe.d5)
                     if average_volume is None:
                         error = MissingContextValue(f"Average volume for {self.current_symbol} is not available")
-                        span.add_event(error.message)
+                        span.add_event(str(error))
                         raise error
                     return Decimal(average_volume)
 
@@ -233,7 +232,7 @@ class TradingContext:
                     average_volume = self.current_security.compute_average_volume(Timeframe.d20)
                     if average_volume is None:
                         error = MissingContextValue(f"Average volume for {self.current_symbol} is not available")
-                        span.add_event(error.message)
+                        span.add_event(str(error))
                         raise error
                     return Decimal(average_volume)
 
@@ -241,7 +240,7 @@ class TradingContext:
                     average_volume = self.current_security.compute_average_volume(Timeframe.d50)
                     if average_volume is None:
                         error = MissingContextValue(f"Average volume for {self.current_symbol} is not available")
-                        span.add_event(error.message)
+                        span.add_event(str(error))
                         raise error
                     return Decimal(average_volume)
 
@@ -249,7 +248,7 @@ class TradingContext:
                     average_volume = self.current_security.compute_average_volume(Timeframe.d100)
                     if average_volume is None:
                         error = MissingContextValue(f"Average volume for {self.current_symbol} is not available")
-                        span.add_event(error.message)
+                        span.add_event(str(error))
                         raise error
                     return Decimal(average_volume)
 
@@ -257,7 +256,7 @@ class TradingContext:
                     average_volume = self.current_security.compute_average_volume(Timeframe.d200)
                     if average_volume is None:
                         error = MissingContextValue(f"Average volume for {self.current_symbol} is not available")
-                        span.add_event(error.message)
+                        span.add_event(str(error))
                         raise error
                     return Decimal(average_volume)
 
@@ -265,7 +264,7 @@ class TradingContext:
                     current_volume = self.current_security.current_bar.volume
                     if current_volume is None:
                         error = MissingContextValue(f"Current volume for {self.current_symbol} is not available")
-                        span.add_event(error.message)
+                        span.add_event(str(error))
                         raise error
                     return Decimal(current_volume)
 
@@ -273,7 +272,7 @@ class TradingContext:
                     current_price = self.current_security.current_bar.close
                     if current_price is None:
                         error = MissingContextValue(f"Current price for {self.current_symbol} is not available")
-                        span.add_event(error.message)
+                        span.add_event(str(error))
                         raise error
                     return current_price.amount
 
@@ -281,7 +280,7 @@ class TradingContext:
                     account_exposure = await self.broker.get_account_exposure()
                     if account_exposure is None:
                         error = MissingContextValue("Account exposure is not available")
-                        span.add_event(error.message)
+                        span.add_event(str(error))
                         raise error
                     return account_exposure
 
@@ -289,7 +288,7 @@ class TradingContext:
                     open_positions = await self.broker.get_positions()
                     if open_positions is None:
                         error = MissingContextValue("Number of open positions is not available")
-                        span.add_event(error.message)
+                        span.add_event(str(error))
                         raise error
                     return len(open_positions.keys())
 
@@ -297,19 +296,19 @@ class TradingContext:
                     available_cash = await self.broker.get_available_cash()
                     if available_cash is None:
                         error = MissingContextValue("Available cash is not available")
-                        span.add_event(error.message)
+                        span.add_event(str(error))
                         raise error
                     return available_cash.amount
 
                 case ContextIdentifier.AVERAGE_COST:
                     if self.current_position is None:
                         error = MissingContextValue("Average cost is not available as no position is open")
-                        span.add_event(error.message)
+                        span.add_event(str(error))
                         raise error
                     average_cost = self.current_position.average_cost
                     if average_cost is None:
                         error = MissingContextValue("Average cost is not available")
-                        span.add_event(error.message)
+                        span.add_event(str(error))
                         raise error
                     return average_cost.amount
                 case _:

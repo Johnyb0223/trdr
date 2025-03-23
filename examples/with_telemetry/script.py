@@ -9,7 +9,6 @@ from trdr.core.security_provider.security_provider import SecurityProvider
 from trdr.core.broker.mock_broker.mock_broker import MockBroker
 from trdr.core.trading_engine.trading_engine import TradingEngine
 from trdr.core.trading_context.trading_context import TradingContext
-from trdr.core.broker.alpaca_broker.alpaca_broker import AlpacaBroker
 from trdr.core.broker.pdt.nun_strategy import NunStrategy
 
 if __name__ == "__main__":
@@ -23,7 +22,7 @@ if __name__ == "__main__":
         tracer = trace.get_tracer("trdr")
         try:
             pdt_strategy = NunStrategy.create(tracer=tracer)
-            async with await AlpacaBroker.create(pdt_strategy=pdt_strategy, tracer=tracer) as broker:
+            async with await MockBroker.create(pdt_strategy=pdt_strategy, tracer=tracer) as broker:
                 bar_provider = await YFBarProvider.create(["TSLA"], tracer)
                 security_provider = await SecurityProvider.create(bar_provider, tracer)
                 context = await TradingContext.create(security_provider, broker, tracer)

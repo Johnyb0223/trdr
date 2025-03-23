@@ -121,6 +121,7 @@ class OrderGenerator:
                 type=order_type,
                 status=status,
                 avg_fill_price=fill_price,
+                current_price=price,
                 created_at=created_at,
                 filled_at=filled_at,
             )

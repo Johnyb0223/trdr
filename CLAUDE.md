@@ -25,6 +25,7 @@ pytest src/trdr/path/to/test_file.py::TestClass::test_method
 - **Error handling**: Custom exception hierarchy in each module
 - **Documentation**: Descriptive docstrings for public methods
 - **DSL**: Trading strategies defined in `.trdr` files with STRATEGY, ENTRY, EXIT sections
+- **Async testing**: use asyncio.run() to run async calls in tests
 
 ## Project Structure
 

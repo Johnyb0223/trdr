@@ -1,10 +1,12 @@
 from typing import Type, TypeVar, Dict, Any
 from opentelemetry import trace
+from datetime import datetime
 
 from ...dsl.dsl_loader import StrategyDSLLoader
-from ..broker.models import OrderSide
+from ..broker.models import OrderSide, Order, OrderStatus, OrderType
 from ..trading_context.trading_context import TradingContext
 from ..trading_context.exceptions import MissingContextValue
+from ..shared.models import TradingDateTime
 
 T = TypeVar("T", bound="TradingEngine")
 
@@ -146,11 +148,19 @@ class TradingEngine:
 
                                 if should_exit:
                                     security_span.add_event("placing_sell_order")
-                                    await self.trading_context.broker.place_order(
-                                        self.trading_context.current_symbol,
-                                        OrderSide.SELL,
-                                        self.trading_context.current_position.quantity,
+
+                                    order = Order(
+                                        symbol=self.trading_context.current_symbol,
+                                        side=OrderSide.SELL,
+                                        quantity_requested=self.trading_context.current_position.quantity,
+                                        status=OrderStatus.PENDING,
+                                        type=OrderType.MARKET,
+                                        created_at=TradingDateTime.now(),
+                                        current_price=self.trading_context.current_security.current_bar.close,
                                     )
+
+                                    security_span.add_event("placing_sell_order")
+                                    await self.trading_context.broker.place_order(order)
                                     exit_signals += 1
 
                             except MissingContextValue:
@@ -170,12 +180,25 @@ class TradingEngine:
                                     # Get position size from strategy's sizing rules
                                     security_span.add_event("evaluating_sizing")
                                     dollar_amount = await self.strategy_ast.evaluate_sizing(self.trading_context)
-                                    security_span.set_attribute("position_size", float(dollar_amount))
+                                    security_span.set_attribute("dollar_amount_requested", float(dollar_amount))
+
+                                    number_of_shares = int(
+                                        dollar_amount // self.trading_context.current_security.current_bar.close.amount
+                                    )
+                                    security_span.set_attribute("number_of_shares_requested", number_of_shares)
+
+                                    order = Order(
+                                        symbol=self.trading_context.current_symbol,
+                                        side=OrderSide.BUY,
+                                        quantity_requested=number_of_shares,
+                                        status=OrderStatus.PENDING,
+                                        type=OrderType.MARKET,
+                                        created_at=TradingDateTime.now(),
+                                        current_price=self.trading_context.current_security.current_bar.close,
+                                    )
 
                                     security_span.add_event("placing_buy_order")
-                                    await self.trading_context.broker.place_order(
-                                        self.trading_context.current_symbol, OrderSide.BUY, dollar_amount
-                                    )
+                                    await self.trading_context.broker.place_order(order)
                                     entry_signals += 1
 
                             except MissingContextValue:

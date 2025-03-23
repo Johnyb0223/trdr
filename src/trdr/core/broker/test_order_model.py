@@ -16,6 +16,7 @@ def test_creating_order_with_quantity(weekday_trading_datetime):
         side=OrderSide.BUY,
         type=OrderType.MARKET,
         status=OrderStatus.PENDING,
+        current_price=Money(amount=Decimal("100")),
         avg_fill_price=None,
         created_at=weekday_trading_datetime,
         filled_at=None,
@@ -23,45 +24,6 @@ def test_creating_order_with_quantity(weekday_trading_datetime):
 
     assert order.symbol == "AAPL"
     assert order.quantity_requested == Decimal("10")
-    assert order.dollar_amount_requested is None
-
-
-def test_creating_order_with_dollar_amount(weekday_trading_datetime):
-    """Order can be created with dollar_amount_requested."""
-
-    order = Order(
-        symbol="AAPL",
-        dollar_amount_requested=Money(amount=Decimal("1500.00")),
-        quantity_filled=Decimal("0"),
-        side=OrderSide.BUY,
-        type=OrderType.MARKET,
-        status=OrderStatus.PENDING,
-        avg_fill_price=None,
-        created_at=weekday_trading_datetime,
-        filled_at=None,
-    )
-
-    assert order.symbol == "AAPL"
-    assert order.dollar_amount_requested.amount == Decimal("1500.00")
-    assert order.quantity_requested is None
-
-
-def test_cannot_specify_both_quantity_and_dollar_amount(weekday_trading_datetime):
-    """Order cannot have both quantity_requested and dollar_amount_requested."""
-
-    with pytest.raises(ValueError, match="Cannot specify both dollar_amount_requested and quantity_requested"):
-        Order(
-            symbol="AAPL",
-            quantity_requested=Decimal("10"),
-            dollar_amount_requested=Money(amount=Decimal("1500.00")),
-            quantity_filled=Decimal("0"),
-            side=OrderSide.BUY,
-            type=OrderType.MARKET,
-            status=OrderStatus.PENDING,
-            avg_fill_price=None,
-            created_at=weekday_trading_datetime,
-            filled_at=None,
-        )
 
 
 def test_filled_order_validation(weekday_trading_datetime):
@@ -233,6 +195,7 @@ def test_pending_order_validation(weekday_trading_datetime):
         side=OrderSide.BUY,
         type=OrderType.MARKET,
         status=OrderStatus.PENDING,
+        current_price=Money(amount=Decimal("100")),
         avg_fill_price=None,
         created_at=weekday_trading_datetime,
         filled_at=None,
@@ -250,6 +213,7 @@ def test_pending_order_validation(weekday_trading_datetime):
             side=OrderSide.BUY,
             type=OrderType.MARKET,
             status=OrderStatus.PENDING,
+            current_price=Money(amount=Decimal("100")),
             avg_fill_price=None,
             created_at=weekday_trading_datetime,
             filled_at=None,
@@ -264,6 +228,7 @@ def test_pending_order_validation(weekday_trading_datetime):
             side=OrderSide.BUY,
             type=OrderType.MARKET,
             status=OrderStatus.PENDING,
+            current_price=Money(amount=Decimal("100")),
             avg_fill_price=Money(amount=Decimal("150.00")),  # Should be None for pending
             created_at=weekday_trading_datetime,
             filled_at=None,
@@ -278,6 +243,7 @@ def test_pending_order_validation(weekday_trading_datetime):
             side=OrderSide.BUY,
             type=OrderType.MARKET,
             status=OrderStatus.PENDING,
+            current_price=Money(amount=Decimal("100")),
             avg_fill_price=None,
             created_at=weekday_trading_datetime,
             filled_at=filled_at,  # Should be None for pending
@@ -295,14 +261,14 @@ def test_cancelled_and_rejected_orders(weekday_trading_datetime):
         quantity_filled=Decimal("0"),
         side=OrderSide.BUY,
         type=OrderType.MARKET,
-        status=OrderStatus.CANCELLED,
+        status=OrderStatus.CANCELED,
         avg_fill_price=None,
         created_at=weekday_trading_datetime,
         filled_at=None,
     )
 
     assert cancelled_no_fill is not None
-    assert cancelled_no_fill.status == OrderStatus.CANCELLED
+    assert cancelled_no_fill.status == OrderStatus.CANCELED
 
     # Rejected order
     rejected_order = Order(
@@ -327,14 +293,14 @@ def test_cancelled_and_rejected_orders(weekday_trading_datetime):
         quantity_filled=Decimal("5"),
         side=OrderSide.BUY,
         type=OrderType.MARKET,
-        status=OrderStatus.CANCELLED,
+        status=OrderStatus.CANCELED,
         avg_fill_price=Money(amount=Decimal("150.00")),
         created_at=weekday_trading_datetime,
         filled_at=filled_at,
     )
 
     assert partial_cancelled is not None
-    assert partial_cancelled.status == OrderStatus.CANCELLED
+    assert partial_cancelled.status == OrderStatus.CANCELED
     assert partial_cancelled.quantity_filled < partial_cancelled.quantity_requested
 
 
@@ -356,7 +322,7 @@ def test_string_representation(weekday_trading_datetime):
 
     str_repr = str(order)
     assert "AAPL" in str_repr
-    assert "BUY" in str_repr
+    assert "buy" in str_repr
     assert "FILLED" in str_repr
     assert "10" in str_repr
 
@@ -424,6 +390,7 @@ def test_order_generation_with_custom_criteria():
         symbol="MSFT",
         side=OrderSide.BUY,
         status=OrderStatus.PENDING,
+        current_price=Money(amount=Decimal("100")),
         quantity_min=Decimal("90"),
         quantity_max=Decimal("100"),
     )
@@ -435,5 +402,6 @@ def test_order_generation_with_custom_criteria():
     assert order.symbol == "MSFT"
     assert order.side == OrderSide.BUY
     assert order.status == OrderStatus.PENDING
+    assert order.current_price is not None
     assert order.quantity_filled == Decimal("0")  # Pending order
     assert order.avg_fill_price is None  # Pending order
