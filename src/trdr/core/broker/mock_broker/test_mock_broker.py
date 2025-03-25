@@ -364,3 +364,31 @@ def test_pdt_cash_validation_for_shorts(mock_broker_with_nun_strategy):
 
     cash = asyncio.run(broker.get_available_cash())
     assert cash.amount == Decimal("25000")
+
+
+def test_position_exposure(mock_broker_with_nun_strategy):
+    """Test that position exposure is calculated correctly."""
+    broker = mock_broker_with_nun_strategy
+    trading_datetime = TradingDateTime.now()
+    while trading_datetime.is_weekend:
+        trading_datetime = TradingDateTime.from_utc(trading_datetime.timestamp - timedelta(days=1))
+
+    # Place a buy order
+    order = Order(
+        symbol="TEST",
+        side=OrderSide.BUY,
+        type=OrderType.MARKET,
+        quantity_requested=Decimal(100),
+        quantity_filled=Decimal(0),
+        status=OrderStatus.PENDING,
+        current_price=Money(amount=Decimal(100)),
+        created_at=trading_datetime,
+        filled_at=None,
+    )
+    asyncio.run(broker.place_order(order))
+
+    position_exposure = asyncio.run(broker.get_position_exposure("TEST"))
+
+    assert position_exposure > 0
+    assert position_exposure < 1  # Exposure should be less than 100%
+    assert isinstance(position_exposure, Decimal)

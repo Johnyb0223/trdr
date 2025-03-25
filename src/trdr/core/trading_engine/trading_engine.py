@@ -152,7 +152,7 @@ class TradingEngine:
                                     order = Order(
                                         symbol=self.trading_context.current_symbol,
                                         side=OrderSide.SELL,
-                                        quantity_requested=self.trading_context.current_position.quantity,
+                                        quantity_requested=self.trading_context.current_position.size,
                                         status=OrderStatus.PENDING,
                                         type=OrderType.MARKET,
                                         created_at=TradingDateTime.now(),

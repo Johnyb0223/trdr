@@ -15,18 +15,23 @@ if __name__ == "__main__":
 
     async def main():
         tracer_provider = TracerProvider()
+        """
+        I run the collector as a container locally for testing purposes.
+        """
         otlp_exporter = OTLPSpanExporter(endpoint="localhost:4317", insecure=True)
         span_processor = BatchSpanProcessor(otlp_exporter, max_export_batch_size=20)
         tracer_provider.add_span_processor(span_processor)
         trace.set_tracer_provider(tracer_provider)
         tracer = trace.get_tracer("trdr")
         try:
-            pdt_strategy = NunStrategy.create(tracer=tracer)
-            async with await MockBroker.create(pdt_strategy=pdt_strategy, tracer=tracer) as broker:
+            pdt_strategy = NunStrategy.create(tracer)
+            async with await MockBroker.create(pdt_strategy, tracer) as broker:
                 bar_provider = await YFBarProvider.create(["TSLA"], tracer)
                 security_provider = await SecurityProvider.create(bar_provider, tracer)
                 context = await TradingContext.create(security_provider, broker, tracer)
-                engine = await TradingEngine.create("first-strat", context, tracer=tracer)
+                engine = await TradingEngine.create(
+                    "first-strat", context, strategies_dir="../strategies", tracer=tracer
+                )
                 await engine.execute()
 
         except Exception as e:

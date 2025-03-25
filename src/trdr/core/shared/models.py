@@ -1,5 +1,4 @@
 from decimal import Decimal
-from dataclasses import dataclass
 from datetime import date, datetime, time, timezone, timedelta
 from enum import Enum
 from typing import Optional

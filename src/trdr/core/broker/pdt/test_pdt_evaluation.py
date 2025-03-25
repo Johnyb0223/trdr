@@ -226,7 +226,7 @@ def test_yolo_strategy_evaluate_existing_position(create_order, long_dummy_posit
     )
     decision = strategy.evaluate_order(context)
     assert decision.allowed is False
-    assert "YOLO strategy prevents same-day closes" in decision.reason
+    assert "Closing this position would violate PDT rules" in decision.reason
 
     # Test case: closing short position with day trades available
     buy_order = create_order(short_dummy_position.symbol, side=OrderSide.BUY)

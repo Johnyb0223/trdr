@@ -16,7 +16,7 @@ if __name__ == "__main__":
                 bar_provider = await YFBarProvider.create(["TSLA"])
                 security_provider = await SecurityProvider.create(bar_provider)
                 context = await TradingContext.create(security_provider, broker)
-                engine = await TradingEngine.create("first-strat", context)
+                engine = await TradingEngine.create("first-strat", context, strategies_dir="../strategies")
                 await engine.execute()
 
         except Exception as e:

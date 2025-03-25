@@ -1,6 +1,6 @@
 # TRDR - Trading Framework
 
-TRDR is a modern, asynchronous trading framework for algorithmic trading in Python. It features a custom Domain-Specific Language (DSL) for expressing trading strategies in a clear, concise manner.
+TRDR is a framework for algorithmic trading in Python. It features a custom Domain-Specific Language (DSL) for expressing trading strategies in a clear, concise manner.
 
 ## 🌟 Features
 
@@ -9,7 +9,7 @@ TRDR is a modern, asynchronous trading framework for algorithmic trading in Pyth
 - **Async First**: Built from the ground up with Python's async/await pattern
 - **Mock Trading**: Test strategies with a mock broker before using real money
 - **Telemetry Integration**: Optional OpenTelemetry support for performance monitoring
-- **Pattern Day Trading Controls**: Built-in PDT rule compliance strategies
+- **Pattern Day Trading Controls**: Built-in [PDT rule compliance strategies](src/trdr/core/broker/pdt/README.md) (NunStrategy, WiggleStrategy, YoloStrategy)
 
 ## 📦 Installation
 
@@ -83,10 +83,12 @@ TRDR is built with a modular, component-based architecture:
 
 - **Bar Provider**: Supplies price/volume data (Yahoo Finance implementation included)
 - **Security Provider**: Manages available securities for trading
-- **Broker**: Handles order execution (Mock and Alpaca implementations included)
+- **Broker**: Handles order execution
+  - [Mock Broker](src/trdr/core/broker/mock_broker/) - Local simulation for testing
+  - [Alpaca Broker](src/trdr/core/broker/alpaca_broker/README.md) - Real trading with Alpaca API
 - **Trading Context**: Coordinates components and maintains state
 - **Trading Engine**: Executes strategies using the DSL parser
-- **PDT Strategies**: Enforces Pattern Day Trading rules
+- **[PDT Strategies](src/trdr/core/broker/pdt/README.md)**: Enforces Pattern Day Trading rules with multiple compliance strategies
 
 ## 📊 DSL Reference
 
@@ -116,8 +118,8 @@ ANY_OF          # Any condition can be true
 ### Technical Indicators
 
 ```
-MA{period}      # Moving average (e.g., MA5, MA20, MA50)
-AV{period}      # Average volume (e.g., AV5, AV20, AV50)I
+MA{period}      # Moving average (e.g., MA5, MA20, MA50, MA100, MA200)
+AV{period}      # Average volume (e.g., AV5, AV20, AV50, AV100, AV200)
 ```
 
 ### Comparison Operators
@@ -136,7 +138,7 @@ CROSSED_BELOW   # Indicator crossed below another
 
 ```
 CURRENT_PRICE   # Current price of the security
-AVERAGE_COST    # Average cost of current position
+CURRENT_VOLUME  # Current volume of the security
 ```
 
 ### Account Metrics
@@ -144,6 +146,7 @@ AVERAGE_COST    # Average cost of current position
 ```
 ACCOUNT_EXPOSURE        # Percentage of account exposed to market
 AVAILABLE_CASH          # Available cash for trading
+AVERAGE_COST            # Average cost of current position
 NUMBER_OF_OPEN_POSITIONS # Number of currently open positions
 ```
 

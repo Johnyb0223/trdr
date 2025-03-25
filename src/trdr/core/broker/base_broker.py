@@ -207,7 +207,7 @@ class BaseBroker(ABC):
             if self._equity.amount == 0:
                 span.set_status(trace.StatusCode.OK)
                 return Decimal(0)
-            exposure = position.quantity * position.average_cost.amount / self._equity.amount
+            exposure = position.size * position.average_cost.amount / self._equity.amount
             span.set_attribute("exposure", str(exposure))
             span.set_status(trace.StatusCode.OK)
             return exposure

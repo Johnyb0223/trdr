@@ -43,4 +43,6 @@ class YoloStrategy(BasePDTStrategy):
             if rolling_day_trade_count < 3:
                 return PDTDecision(allowed=True, reason="Order allowed: YOLO strategy permits unlimited sells")
             else:
-                return PDTDecision(allowed=False, reason="Order not allowed: YOLO strategy prevents same-day closes")
+                return PDTDecision(
+                    allowed=False, reason="Order not allowed: Closing this position would violate PDT rules"
+                )
