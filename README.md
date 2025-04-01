@@ -92,7 +92,7 @@ TRDR is built with a modular, component-based architecture:
 
 ## 📊 DSL Reference
 
-The TRDR Domain Specific Language provides a clean syntax for expressing trading logic:
+The TRDR Domain Specific Language provides a clean (I hope) syntax for expressing trading logic:
 
 ### Strategy Structure
 
@@ -144,9 +144,9 @@ CURRENT_VOLUME  # Current volume of the security
 ### Account Metrics
 
 ```
-ACCOUNT_EXPOSURE        # Percentage of account exposed to market
-AVAILABLE_CASH          # Available cash for trading
-AVERAGE_COST            # Average cost of current position
+ACCOUNT_EXPOSURE         # Percentage of account exposed to market
+AVAILABLE_CASH           # Available cash for trading
+AVERAGE_COST             # Average cost of current position
 NUMBER_OF_OPEN_POSITIONS # Number of currently open positions
 ```
 

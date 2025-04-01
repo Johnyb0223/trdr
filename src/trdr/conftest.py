@@ -47,7 +47,7 @@ def security_provider_with_fake_data(yf_bar_provider_with_fake_data):
 
 
 @pytest.fixture(scope="function")
-def random_security(symbol="AAPL", count=200):
+def random_security(symbol="AAPL", bar_count=200):
     """Create a random security with the given symbol and bar count.
 
     Args:
@@ -57,7 +57,7 @@ def random_security(symbol="AAPL", count=200):
     Returns:
         A Security instance with randomly generated price and volume data
     """
-    generator = SecurityGenerator(SecurityCriteria(count=count))
+    generator = SecurityGenerator(SecurityCriteria(bar_count=bar_count))
     security = generator.find_suitable_security()
     # Override the symbol if requested
     if symbol != security.symbol:
@@ -68,27 +68,27 @@ def random_security(symbol="AAPL", count=200):
 @pytest.fixture(scope="function")
 def get_random_security():
     """Legacy fixture name for backward compatibility."""
-    generator = SecurityGenerator(SecurityCriteria(count=200))
+    generator = SecurityGenerator(SecurityCriteria(bar_count=200))
     return generator.find_suitable_security()
 
 
 @pytest.fixture(scope="module")
 def security_generator():
     """Return a configured SecurityGenerator instance."""
-    return SecurityGenerator(SecurityCriteria(count=200))
+    return SecurityGenerator(SecurityCriteria(bar_count=200))
 
 
 @pytest.fixture(scope="function")
 def short_dummy_position():
     """Create a test position with default values."""
-    position = PositionGenerator(criteria=PositionCriteria(count=1, net_position_bias=0)).generate_positions()[0]
+    position = PositionGenerator(criteria=PositionCriteria(bar_count=1, net_position_bias=0)).generate_positions()[0]
     return position
 
 
 @pytest.fixture(scope="function")
 def long_dummy_position():
     """Create a test position with default values."""
-    position = PositionGenerator(criteria=PositionCriteria(count=1, net_position_bias=1)).generate_positions()[0]
+    position = PositionGenerator(criteria=PositionCriteria(bar_count=1, net_position_bias=1)).generate_positions()[0]
     return position
 
 
@@ -97,7 +97,7 @@ def dummy_positions():
     """Create a dictionary of test positions."""
     num_positions = random.randint(1, 9)
     positions = PositionGenerator(
-        criteria=PositionCriteria(count=num_positions, net_position_bias=0.5)
+        criteria=PositionCriteria(bar_count=num_positions, net_position_bias=0.5)
     ).generate_positions()
     return positions
 

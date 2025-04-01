@@ -272,6 +272,8 @@ class BaseBroker(ABC):
         we dont need to check pdt rules if cash is over 25k. However, if this trade puts us below 25k, we need to check pdt rules.
         """
         with self._tracer.start_as_current_span("BaseBroker._validate_pre_order") as span:
+            if (order.quantity_requested * order.current_price.amount) > self._cash.amount:
+                raise ValueError("Insufficient cash to place order")
             if not (self._cash.amount - order.quantity_requested * order.current_price.amount) < 25000:
                 span.add_event("cash is over 25k, skipping pdt rules")
                 span.set_status(trace.StatusCode.OK)

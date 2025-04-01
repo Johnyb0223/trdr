@@ -23,7 +23,7 @@ class Crossover(BaseModel):
 
 
 class SecurityCriteria(BaseModel):
-    count: int
+    bar_count: int
     start_price: Money | None = Money(amount=Decimal(random.randint(10, 500)))
     start_volume: int | None = random.randint(1000, 100000)
     moving_averages: List[MovingAverage] | None = None
@@ -96,7 +96,9 @@ class SecurityGenerator:
 
     def find_suitable_security(self) -> "Security":
         while True:
-            bars = self.create_dummy_bars(self.criteria.count, self.criteria.start_price, self.criteria.start_volume)
+            bars = self.create_dummy_bars(
+                self.criteria.bar_count, self.criteria.start_price, self.criteria.start_volume
+            )
             security = Security(symbol="AAPL", current_bar=bars[0], bars=bars)
 
             if self.evaluate_security(security):
@@ -146,7 +148,7 @@ class SecurityGenerator:
 
 if __name__ == "__main__":
     criteria = SecurityCriteria(
-        count=100,
+        bar_count=100,
         moving_averages=[MovingAverage(timeframe=Timeframe.d5, target=Decimal(100), operator=">")],
         crossovers=[Crossover(type="golden_cross", ma1=Timeframe.d5, ma2=Timeframe.d20)],
     )
